@@ -6,6 +6,7 @@ La estructura la controla el script SQL; así no chocamos con Spring Boot.
 """
 
 from django.db import models
+from django.contrib.auth.hashers import make_password, check_password
 
 
 class Restaurante(models.Model):
@@ -38,9 +39,18 @@ class Empleado(models.Model):
     ACTIVO = 'ACTIVO'
 
     id = models.AutoField(primary_key=True)
-    restaurante = models.ForeignKey(Restaurante, on_delete=models.PROTECT, db_column='restaurante_id',
-                                    related_name='empleados')
-    rol = models.ForeignKey(Rol, on_delete=models.PROTECT, db_column='rol_id', related_name='empleados')
+    restaurante = models.ForeignKey(
+        Restaurante, 
+        on_delete=models.PROTECT, 
+        db_column='restaurante_id',
+        related_name='empleados'
+    )
+    rol = models.ForeignKey(
+        Rol, 
+        on_delete=models.PROTECT, 
+        db_column='rol_id', 
+        related_name='empleados'
+    )
     nombre_completo = models.CharField(max_length=150)
     correo = models.CharField(max_length=150, unique=True)
     password_hash = models.CharField(max_length=255)
@@ -59,6 +69,23 @@ class Empleado(models.Model):
     def esta_activo(self):
         return self.estado == self.ACTIVO
 
+    def set_pin(self, raw_pin):
+        """Convierte el PIN plano a hash PBKDF2."""
+        if raw_pin:
+            self.pin_acceso = make_password(str(raw_pin))
+
+    def check_pin(self, raw_pin):
+        """Verifica si el PIN ingresado coincide con el hash almacenado."""
+        if not self.pin_acceso:
+            return False
+        return check_password(str(raw_pin), self.pin_acceso)
+
+    def save(self, *args, **kwargs):
+        """Asegura que el PIN se encripte si llega en texto plano."""
+        if self.pin_acceso and not self.pin_acceso.startswith(('pbkdf2_sha256$', 'argon2', 'bcrypt')):
+            self.pin_acceso = make_password(str(self.pin_acceso))
+        super().save(*args, **kwargs)
+
 
 class Ingrediente(models.Model):
     """HU-05: insumo del almacén. Cada insumo pertenece a UN restaurante (multi-tenant)."""
@@ -67,8 +94,12 @@ class Ingrediente(models.Model):
     DOTACION_PERIODO = [('SEMANAL', 'Semanal'), ('MENSUAL', 'Mensual')]
 
     id = models.AutoField(primary_key=True)
-    restaurante = models.ForeignKey(Restaurante, on_delete=models.PROTECT, db_column='restaurante_id',
-                                    related_name='ingredientes')
+    restaurante = models.ForeignKey(
+        Restaurante, 
+        on_delete=models.PROTECT, 
+        db_column='restaurante_id',
+        related_name='ingredientes'
+    )
     nombre = models.CharField(max_length=150)
     unidad_medida = models.CharField(max_length=20)
     stock_actual = models.DecimalField(max_digits=10, decimal_places=2, default=0)
@@ -90,3 +121,62 @@ class Ingrediente(models.Model):
     @property
     def bajo_stock_minimo(self):
         return self.stock_actual < self.stock_minimo
+
+
+class Categoria(models.Model):
+    nombre = models.CharField(max_length=50)
+    descripcion = models.CharField(max_length=150, blank=True, null=True)
+
+    class Meta:
+        db_table = 'categoria'
+        managed = False
+
+    def __str__(self):
+        return self.nombre
+
+
+class Producto(models.Model):
+    nombre = models.CharField(max_length=100)
+    precio = models.DecimalField(max_digits=10, decimal_places=2)
+    categoria = models.ForeignKey(
+        Categoria, 
+        on_delete=models.CASCADE, 
+        db_column='categoria_id'
+    )
+    restaurante = models.ForeignKey(
+        Restaurante,
+        on_delete=models.CASCADE,
+        db_column='restaurante_id'
+    )
+    activo = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = 'producto'
+        managed = False
+
+    def __str__(self):
+        return self.nombre
+
+
+class RecetaDetalle(models.Model):
+    producto = models.ForeignKey(
+        Producto, 
+        on_delete=models.CASCADE, 
+        related_name='detalles_receta', 
+        db_column='producto_id'
+    )
+    ingrediente = models.ForeignKey(
+        Ingrediente, 
+        on_delete=models.CASCADE, 
+        db_column='ingrediente_id',
+        related_name='recetas'
+    )
+    cantidad = models.DecimalField(max_digits=10, decimal_places=3)
+    unidad_medida = models.CharField(max_length=20)
+
+    class Meta:
+        db_table = 'receta_detalle'
+        managed = False
+
+    def __str__(self):
+        return f"{self.producto.nombre} - {self.ingrediente.nombre} ({self.cantidad} {self.unidad_medida})"
