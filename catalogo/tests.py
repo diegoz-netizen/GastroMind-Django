@@ -43,6 +43,9 @@ class BaseCatalogoTest(TestCase):
         cls.admin_central = empleado(cls.central, admin, 'admin.central@test.com')
         cls.admin_norte = empleado(cls.norte, admin, 'admin.norte@test.com')
         cls.mozo_inactivo = empleado(cls.central, mozo, 'mozo@test.com', estado='INACTIVO')
+        cls.almacenero_central = empleado(cls.central, Rol.objects.create(nombre='ALMACENERO'),
+                                          'almacen@test.com')
+        cls.cocinero_central = empleado(cls.central, Rol.objects.create(nombre='COCINERO'), 'cocina@test.com')
 
         def insumo(restaurante, nombre, stock, minimo):
             return Ingrediente.objects.create(restaurante=restaurante, nombre=nombre, unidad_medida='kg',
@@ -125,7 +128,136 @@ class InsumosMultiTenantTest(BaseCatalogoTest):
         self.con_token(token_como_spring(self.admin_central))
         self.assertEqual([i['nombre'] for i in self.client.get(URL, {'search': 'tom'}).json()], ['Tomate'])
 
-    def test_por_ahora_es_solo_lectura(self):
+    def test_no_se_puede_editar_ni_borrar(self):
+        # HU-05 es solo el alta; editar o borrar insumos no entra en este sprint
         self.con_token(token_como_spring(self.admin_central))
-        respuesta = self.client.post(URL, {'nombre': 'Sal', 'unidad_medida': 'kg', 'costo_unitario': '1'})
-        self.assertEqual(respuesta.status_code, 405)
+        self.assertEqual(self.client.put(f'{URL}{self.tomate.id}/', {}).status_code, 405)
+        self.assertEqual(self.client.delete(f'{URL}{self.tomate.id}/').status_code, 405)
+
+
+class RegistrarInsumoTest(BaseCatalogoTest):
+    """HU-05: POST /api/catalogo/insumos/ con las validaciones de CA-05."""
+
+    VALIDO = {'nombre': 'Sal', 'unidad_medida': 'kg', 'costo_unitario': '1.50', 'stock_minimo': '2'}
+
+    def setUp(self):
+        super().setUp()
+        self.con_token(token_como_spring(self.admin_central))
+
+    def registrar(self, **cambios):
+        datos = {**self.VALIDO, **cambios}
+        return self.client.post(URL, {k: v for k, v in datos.items() if v is not None}, format='json')
+
+    def assertError400(self, respuesta, campo):
+        self.assertEqual(respuesta.status_code, 400, respuesta.content)
+        self.assertIn(campo, respuesta.json())
+
+    # --- camino feliz ---
+
+    def test_registra_el_insumo_en_el_restaurante_del_token(self):
+        respuesta = self.registrar()
+        self.assertEqual(respuesta.status_code, 201, respuesta.content)
+        insumo = Ingrediente.objects.get(id=respuesta.json()['id'])
+        self.assertEqual(insumo.restaurante_id, self.central.id)
+        self.assertEqual((insumo.nombre, insumo.unidad_medida, insumo.costo_unitario, insumo.stock_minimo),
+                         ('Sal', 'kg', Decimal('1.50'), Decimal('2.00')))
+        self.assertEqual(insumo.stock_actual, Decimal('0'))
+        self.assertEqual(insumo.tipo_control, 'RECETA')
+        self.assertTrue(respuesta.json()['bajo_stock_minimo'])
+
+    def test_ignora_el_restaurante_que_mande_el_cliente(self):
+        respuesta = self.registrar(restaurante=self.norte.id, restaurante_id=self.norte.id)
+        self.assertEqual(respuesta.status_code, 201)
+        self.assertEqual(Ingrediente.objects.get(id=respuesta.json()['id']).restaurante_id, self.central.id)
+
+    def test_el_nuevo_insumo_aparece_solo_en_su_restaurante(self):
+        self.registrar()
+        self.assertIn('Sal', [i['nombre'] for i in self.client.get(URL).json()])
+        self.con_token(token_como_spring(self.admin_norte))
+        self.assertNotIn('Sal', [i['nombre'] for i in self.client.get(URL).json()])
+
+    def test_quita_espacios_del_nombre(self):
+        self.assertEqual(self.registrar(nombre='  Sal  ').json()['nombre'], 'Sal')
+
+    # --- CA-05: obligatorios ---
+
+    def test_sin_nombre_responde_400(self):
+        self.assertError400(self.registrar(nombre=None), 'nombre')
+        self.assertError400(self.registrar(nombre='   '), 'nombre')
+
+    def test_sin_unidad_responde_400(self):
+        self.assertError400(self.registrar(unidad_medida=None), 'unidad_medida')
+
+    def test_unidad_no_valida_responde_400(self):
+        self.assertError400(self.registrar(unidad_medida='toneladas'), 'unidad_medida')
+
+    def test_sin_costo_responde_400(self):
+        self.assertError400(self.registrar(costo_unitario=None), 'costo_unitario')
+
+    def test_sin_stock_minimo_responde_400(self):
+        # La BD le pondría 0 por defecto, pero el CA exige > 0
+        self.assertError400(self.registrar(stock_minimo=None), 'stock_minimo')
+
+    # --- CA-05: costo y stock mínimo > 0 ---
+
+    def test_costo_cero_o_negativo_responde_400(self):
+        for costo in ('0', '-5'):
+            with self.subTest(costo=costo):
+                self.assertError400(self.registrar(costo_unitario=costo), 'costo_unitario')
+
+    def test_stock_minimo_cero_o_negativo_responde_400(self):
+        for minimo in ('0', '-1'):
+            with self.subTest(minimo=minimo):
+                self.assertError400(self.registrar(stock_minimo=minimo), 'stock_minimo')
+
+    def test_stock_actual_negativo_responde_400(self):
+        self.assertError400(self.registrar(stock_actual='-1'), 'stock_actual')
+
+    def test_no_guarda_nada_si_hay_error(self):
+        antes = Ingrediente.objects.count()
+        self.registrar(costo_unitario='0')
+        self.assertEqual(Ingrediente.objects.count(), antes)
+
+    # --- duplicado (restaurante, nombre) ---
+
+    def test_nombre_repetido_en_el_mismo_restaurante_responde_400(self):
+        self.assertError400(self.registrar(nombre='Tomate'), 'nombre')
+        self.assertError400(self.registrar(nombre='tomate'), 'nombre')
+
+    def test_el_mismo_nombre_en_otro_restaurante_si_se_puede(self):
+        # "Pollo" existe en Norte, no en Central
+        self.assertEqual(self.registrar(nombre='Pollo').status_code, 201)
+
+    # --- tipo de control (CHECK chk_dotacion_libre) ---
+
+    def test_libre_sin_dotacion_responde_400(self):
+        respuesta = self.registrar(tipo_control='LIBRE')
+        self.assertError400(respuesta, 'dotacion_cantidad')
+        self.assertIn('dotacion_periodo', respuesta.json())
+
+    def test_libre_con_dotacion_se_registra(self):
+        respuesta = self.registrar(nombre='Detergente', unidad_medida='l', tipo_control='LIBRE',
+                                   dotacion_cantidad='5', dotacion_periodo='SEMANAL')
+        self.assertEqual(respuesta.status_code, 201, respuesta.content)
+        self.assertEqual(respuesta.json()['dotacion_periodo'], 'SEMANAL')
+
+    def test_receta_ignora_la_dotacion(self):
+        respuesta = self.registrar(dotacion_cantidad='5', dotacion_periodo='SEMANAL')
+        self.assertEqual(respuesta.status_code, 201)
+        self.assertIsNone(respuesta.json()['dotacion_cantidad'])
+        self.assertIsNone(respuesta.json()['dotacion_periodo'])
+
+    # --- roles ---
+
+    def test_almacenero_puede_registrar(self):
+        self.con_token(token_como_spring(self.almacenero_central))
+        self.assertEqual(self.registrar().status_code, 201)
+
+    def test_cocinero_no_puede_registrar_pero_si_consultar(self):
+        self.con_token(token_como_spring(self.cocinero_central))
+        self.assertEqual(self.registrar().status_code, 403)
+        self.assertEqual(self.client.get(URL).status_code, 200)
+
+    def test_sin_token_responde_401(self):
+        self.client.credentials()
+        self.assertEqual(self.registrar().status_code, 401)

@@ -67,10 +67,11 @@ Usan SQLite en memoria (no necesitan PostgreSQL ni `.env`). Los tokens de prueba
 | Admin de insumos (empleados y roles en solo lectura) | `catalogo/admin.py` | S05 |
 | Autenticación con el JWT de Spring + exige empleado ACTIVO | `catalogo/authentication.py` | S08 |
 | `GET /api/catalogo/insumos/` (y `/{id}/`) filtrado por restaurante, con `?search=` y `?ordering=` | `catalogo/views.py`, `serializers.py`, `urls.py` | S07–S08 |
+| **HU-05** `POST /api/catalogo/insumos/`: validaciones de CA-05 (nombre, unidad y costo obligatorios; costo y stock mínimo > 0; nombre único por restaurante; dotación si es `LIBRE`). Solo `ADMINISTRADOR` o `ALMACENERO` (403 al resto) | `catalogo/serializers.py`, `permissions.py`, `views.py` | S06–S08 |
 
 ## Estado
 
-Base creada el 12/10/2026 (Sprint 2). La API de insumos es **de solo lectura**: el alta (POST con las validaciones de CA-05) se agrega cuando el equipo confirme en la Planning que el catálogo va en Django.
+Base creada el 12/10/2026 (Sprint 2). El catálogo (HU-05 a 08) va en Django (decidido el 13/10). HU-05: consulta y alta de insumos; editar y borrar no entran en este sprint.
 
 ## Flujo de trabajo
 
