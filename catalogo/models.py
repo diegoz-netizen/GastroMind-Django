@@ -1,12 +1,11 @@
 """
-Modelos sobre las tablas que YA existen en la BD compartida (docs/script_database.sql del repo GastroMind).
+Modelos sobre las tablas que YA existen en la BD compartida (docs/script_database.sql).
 
 managed = False: Django lee y escribe DATOS (CRUD), pero nunca crea ni altera estas tablas.
-La estructura la controla el script SQL; así no chocamos con Spring Boot.
+La estructura la controla el script SQL.
 """
 
 from django.db import models
-from django.contrib.auth.hashers import make_password, check_password
 
 
 class Restaurante(models.Model):
@@ -69,23 +68,6 @@ class Empleado(models.Model):
     def esta_activo(self):
         return self.estado == self.ACTIVO
 
-    def set_pin(self, raw_pin):
-        """Convierte el PIN plano a hash PBKDF2."""
-        if raw_pin:
-            self.pin_acceso = make_password(str(raw_pin))
-
-    def check_pin(self, raw_pin):
-        """Verifica si el PIN ingresado coincide con el hash almacenado."""
-        if not self.pin_acceso:
-            return False
-        return check_password(str(raw_pin), self.pin_acceso)
-
-    def save(self, *args, **kwargs):
-        """Asegura que el PIN se encripte si llega en texto plano."""
-        if self.pin_acceso and not self.pin_acceso.startswith(('pbkdf2_sha256$', 'argon2', 'bcrypt')):
-            self.pin_acceso = make_password(str(self.pin_acceso))
-        super().save(*args, **kwargs)
-
 
 class Ingrediente(models.Model):
     """HU-05: insumo del almacén. Cada insumo pertenece a UN restaurante (multi-tenant)."""
@@ -124,41 +106,46 @@ class Ingrediente(models.Model):
 
 
 class Categoria(models.Model):
-    nombre = models.CharField(max_length=50)
-    descripcion = models.CharField(max_length=150, blank=True, null=True)
+    id = models.AutoField(primary_key=True)
+    restaurante = models.ForeignKey(
+        Restaurante,
+        on_delete=models.PROTECT,
+        db_column='restaurante_id',
+        related_name='categorias'
+    )
+    nombre = models.CharField(max_length=100)
 
     class Meta:
-        db_table = 'categoria'
         managed = False
+        db_table = 'categoria'
 
     def __str__(self):
         return self.nombre
 
 
 class Producto(models.Model):
-    nombre = models.CharField(max_length=100)
-    precio = models.DecimalField(max_digits=10, decimal_places=2)
+    id = models.AutoField(primary_key=True)
     categoria = models.ForeignKey(
         Categoria, 
         on_delete=models.CASCADE, 
-        db_column='categoria_id'
+        db_column='categoria_id',
+        related_name='productos'
     )
-    restaurante = models.ForeignKey(
-        Restaurante,
-        on_delete=models.CASCADE,
-        db_column='restaurante_id'
-    )
-    activo = models.BooleanField(default=True)
+    nombre = models.CharField(max_length=150)
+    precio = models.DecimalField(max_digits=10, decimal_places=2)
+    requiere_receta = models.BooleanField(default=True)
+    estado = models.CharField(max_length=20, default='ACTIVO')
 
     class Meta:
-        db_table = 'producto'
         managed = False
+        db_table = 'producto'
 
     def __str__(self):
         return self.nombre
 
 
 class RecetaDetalle(models.Model):
+    id = models.AutoField(primary_key=True)
     producto = models.ForeignKey(
         Producto, 
         on_delete=models.CASCADE, 
@@ -171,12 +158,12 @@ class RecetaDetalle(models.Model):
         db_column='ingrediente_id',
         related_name='recetas'
     )
-    cantidad = models.DecimalField(max_digits=10, decimal_places=3)
-    unidad_medida = models.CharField(max_length=20)
+    cantidad_requerida = models.DecimalField(max_digits=10, decimal_places=3)
 
     class Meta:
-        db_table = 'receta_detalle'
         managed = False
+        db_table = 'receta_detalle'
+        unique_together = [('producto', 'ingrediente')]
 
     def __str__(self):
-        return f"{self.producto.nombre} - {self.ingrediente.nombre} ({self.cantidad} {self.unidad_medida})"
+        return f"{self.producto.nombre} - {self.ingrediente.nombre} ({self.cantidad_requerida})"

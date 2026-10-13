@@ -108,7 +108,7 @@ AUTH_PASSWORD_VALIDATORS = [
 LANGUAGE_CODE = 'es-pe'
 
 # Hora local para mostrar (Perú). Con USE_TZ, Django lee y escribe la BD en UTC, igual que el backend
-# de Spring desde el PR #8. La regla final (UTC o Lima) está pendiente de la Planning.
+# de Spring desde el PR #8 (regla del equipo, 12/10: se guarda en UTC y se muestra en hora de Perú).
 TIME_ZONE = 'America/Lima'
 USE_I18N = True
 USE_TZ = True

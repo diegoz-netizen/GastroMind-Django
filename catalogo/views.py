@@ -1,51 +1,64 @@
-from rest_framework import viewsets, status
+from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action
-from rest_framework.permissions import AllowAny  # Importar AllowAny
 from rest_framework.response import Response
-from .models import Categoria, Producto, RecetaDetalle
+from rest_framework.permissions import IsAuthenticated
+from .models import Ingrediente, Categoria, Producto, RecetaDetalle
+from .permissions import EsAlmaceneroOAdministrador
 from .serializers import (
-    CategoriaSerializer,
-    ProductoRecetaSerializer,
-    GuardarRecetaSerializer,
-    RecetaDetalleReadSerializer
+    IngredienteSerializer, 
+    CategoriaSerializer, 
+    ProductoRecetaSerializer, 
+    GuardarRecetaSerializer
 )
 
 
-class CategoriaViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = Categoria.objects.all()
+class IngredienteViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated, EsAlmaceneroOAdministrador]
+    serializer_class = IngredienteSerializer
+    filter_backends = [filters.SearchFilter]
+    search_fields = ['nombre']
+    http_method_names = ['get', 'post', 'head', 'options']
+
+    def get_queryset(self):
+        restaurante_id = self.request.user.restaurante_id
+        return Ingrediente.objects.filter(restaurante_id=restaurante_id)
+
+    def perform_create(self, serializer):
+        serializer.save(restaurante_id=self.request.user.restaurante_id)
+
+
+class CategoriaViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
     serializer_class = CategoriaSerializer
-    permission_classes = [AllowAny]  # Permite acceso sin token en desarrollo
+
+    def get_queryset(self):
+        restaurante_id = self.request.user.restaurante_id
+        return Categoria.objects.filter(restaurante_id=restaurante_id)
 
 
 class ProductoViewSet(viewsets.ModelViewSet):
-    queryset = Producto.objects.all()
+    permission_classes = [IsAuthenticated]
     serializer_class = ProductoRecetaSerializer
-    permission_classes = [AllowAny]  # Permite acceso sin token en desarrollo
 
     def get_queryset(self):
-        queryset = super().get_queryset()
-        restaurante_id = self.request.query_params.get('restaurante_id')
-        if restaurante_id:
-            queryset = queryset.filter(restaurante_id=restaurante_id)
-        return queryset
+        restaurante_id = self.request.user.restaurante_id
+        return Producto.objects.filter(categoria__restaurante_id=restaurante_id)
 
-    @action(detail=True, methods=['get', 'post'], url_path='receta')
-    def gestionar_receta(self, request, pk=None):
+    @action(detail=True, methods=['post', 'get'], url_path='receta')
+    def receta(self, request, pk=None):
         producto = self.get_object()
 
         if request.method == 'GET':
-            detalles = RecetaDetalle.objects.filter(producto=producto)
-            serializer = RecetaDetalleReadSerializer(detalles, many=True)
-            return Response(serializer.data, status=status.HTTP_200_OK)
+            serializer = ProductoRecetaSerializer(producto)
+            return Response(serializer.data)
 
         if request.method == 'POST':
             serializer = GuardarRecetaSerializer(
-                data=request.data,
-                context={'producto': producto}
+                data=request.data, 
+                context={'producto': producto, 'request': request}
             )
             if serializer.is_valid():
                 serializer.save()
-                detalles_actualizados = RecetaDetalle.objects.filter(producto=producto)
-                res_serializer = RecetaDetalleReadSerializer(detalles_actualizados, many=True)
+                res_serializer = ProductoRecetaSerializer(producto)
                 return Response(res_serializer.data, status=status.HTTP_200_OK)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
