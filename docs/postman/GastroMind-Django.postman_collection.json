@@ -1,0 +1,119 @@
+{
+  "info": {
+    "name": "GastroMind — Django (catálogo)",
+    "description": "Demo de la base de Django: login en Spring (JWT) → API de insumos en Django.\n\nOrden: ejecutar primero \"1. Login\" (guarda el token solo) y después cualquier request de la carpeta 2.\nRequisitos: Spring en :8080 y Django en :8000, ambos sobre la BD gastromind_demo (docs/seed_demo.sql del repo GastroMind-SpringBoot).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "spring", "value": "http://localhost:8080" },
+    { "key": "django", "value": "http://localhost:8000" },
+    { "key": "clave", "value": "Demo2026!", "description": "Clave de los usuarios del seed de demo (docs/ensayo_demo.sh)" },
+    { "key": "token", "value": "" },
+    { "key": "tokenNorte", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "1. Login (Spring)",
+      "item": [
+        {
+          "name": "Login admin Central",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('200 OK', () => pm.response.to.have.status(200));",
+            "const t = pm.response.json().token;",
+            "pm.test('Devuelve token', () => pm.expect(t).to.be.a('string'));",
+            "pm.collectionVariables.set('token', t);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"correo\": \"admin.central@gastromind.demo\",\n  \"password\": \"{{clave}}\"\n}" },
+            "url": "{{spring}}/api/auth/login"
+          }
+        },
+        {
+          "name": "Login admin Norte",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('200 OK', () => pm.response.to.have.status(200));",
+            "pm.collectionVariables.set('tokenNorte', pm.response.json().token);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"correo\": \"admin.norte@gastromind.demo\",\n  \"password\": \"{{clave}}\"\n}" },
+            "url": "{{spring}}/api/auth/login"
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Insumos (Django)",
+      "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }] },
+      "item": [
+        {
+          "name": "Listar insumos (Central)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('200 OK', () => pm.response.to.have.status(200));",
+            "pm.test('Solo los 4 insumos de Central', () => pm.expect(pm.response.json()).to.have.lengthOf(4));"
+          ] } }],
+          "request": { "method": "GET", "url": "{{django}}/api/catalogo/insumos/" }
+        },
+        {
+          "name": "Buscar por nombre (?search=to)",
+          "request": { "method": "GET", "url": { "raw": "{{django}}/api/catalogo/insumos/?search=to", "host": ["{{django}}"], "path": ["api", "catalogo", "insumos", ""], "query": [{ "key": "search", "value": "to" }] } }
+        },
+        {
+          "name": "Ordenar por costo, mayor primero",
+          "request": { "method": "GET", "url": { "raw": "{{django}}/api/catalogo/insumos/?ordering=-costo_unitario", "host": ["{{django}}"], "path": ["api", "catalogo", "insumos", ""], "query": [{ "key": "ordering", "value": "-costo_unitario" }] } }
+        },
+        {
+          "name": "Detalle: Tomate (bajo stock mínimo)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('200 OK', () => pm.response.to.have.status(200));",
+            "pm.test('Marca bajo_stock_minimo', () => pm.expect(pm.response.json().bajo_stock_minimo).to.be.true);"
+          ] } }],
+          "request": { "method": "GET", "url": "{{django}}/api/catalogo/insumos/4/" }
+        },
+        {
+          "name": "Insumo de OTRO restaurante (Pescado, Norte) → 404",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('404: no ve insumos de otro restaurante', () => pm.response.to.have.status(404));"
+          ] } }],
+          "request": { "method": "GET", "url": "{{django}}/api/catalogo/insumos/6/" }
+        },
+        {
+          "name": "Listar insumos (Norte)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('200 OK', () => pm.response.to.have.status(200));",
+            "pm.test('Solo Limón y Pescado', () => pm.expect(pm.response.json()).to.have.lengthOf(2));"
+          ] } }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{tokenNorte}}", "type": "string" }] },
+            "method": "GET", "url": "{{django}}/api/catalogo/insumos/"
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Seguridad (Django)",
+      "item": [
+        {
+          "name": "Sin token → 401",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('401', () => pm.response.to.have.status(401));"
+          ] } }],
+          "request": { "auth": { "type": "noauth" }, "method": "GET", "url": "{{django}}/api/catalogo/insumos/" }
+        },
+        {
+          "name": "Token alterado → 401",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('401', () => pm.response.to.have.status(401));"
+          ] } }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{token}}x", "type": "string" }] },
+            "method": "GET", "url": "{{django}}/api/catalogo/insumos/"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -3,13 +3,13 @@
 Módulo **Administración** de GastroMind: catálogo, mermas, reportes y motor de IA de compras.
 Curso: *Desarrollo de Aplicaciones Empresariales (Django)*.
 
-> Repo principal (Spring Boot + React + documentación): [diegoz-netizen/GastroMind](https://github.com/diegoz-netizen/GastroMind)
+> Repo principal (Spring Boot + React + documentación): [diegoz-netizen/GastroMind-SpringBoot](https://github.com/diegoz-netizen/GastroMind-SpringBoot)
 
 ## Arquitectura
 
 ```
-React (web-react) ──┬──▶ Spring Boot (repo GastroMind)  ── login, empleados, pedidos, stock
-                    └──▶ Django (este repo)             ── catálogo, mermas, reportes, IA
+React (web-react) ──┬──▶ Spring Boot (GastroMind-SpringBoot) ── login, empleados, pedidos, stock
+                    └──▶ Django (este repo)                    ── catálogo, mermas, reportes, IA
                                      │
                                      ▼
                          PostgreSQL (una sola BD compartida)
@@ -17,7 +17,7 @@ React (web-react) ──┬──▶ Spring Boot (repo GastroMind)  ── login
 
 ## Reglas para compartir la base de datos con Spring Boot
 
-1. **La estructura de las tablas la define `docs/script_database.sql`** del repo principal. Las tablas que ya existen se mapean con modelos `managed = False` (`python manage.py inspectdb` ayuda a generarlos). **Nunca** crear migraciones que alteren tablas que usa Spring.
+1. **La estructura de las tablas la define `docs/script_database.sql`** de GastroMind-SpringBoot. Las tablas que ya existen se mapean con modelos `managed = False` (`python manage.py inspectdb` ayuda a generarlos). **Nunca** crear migraciones que alteren tablas que usa Spring.
 2. Las migraciones de Django quedan solo para sus tablas propias (`auth`, `admin`, `sessions`) o para tablas nuevas acordadas con el equipo.
 3. **Login único:** el JWT lo emite Spring Boot (`POST /api/auth/login`). Django lo valida con la misma clave (HS256, claims `usuario_id` y `restaurante_id`) y rechaza al empleado que no esté `ACTIVO`.
 4. **Multi-tenant:** toda consulta se filtra por el `restaurante_id` del token. El cliente nunca lo envía.
@@ -26,7 +26,7 @@ React (web-react) ──┬──▶ Spring Boot (repo GastroMind)  ── login
 
 ## Cómo correrlo
 
-Requisitos: Python 3.12+ y la BD PostgreSQL cargada con `docs/script_database.sql` + `docs/seed_demo.sql` del repo principal.
+Requisitos: Python 3.12+ y la BD PostgreSQL cargada con `docs/script_database.sql` + `docs/seed_demo.sql` de GastroMind-SpringBoot.
 
 ```bash
 python -m venv venv
@@ -45,6 +45,8 @@ curl -X POST http://localhost:8080/api/auth/login -H "Content-Type: application/
 # 2. Usar ese token en Django (puerto 8000)
 curl http://localhost:8000/api/catalogo/insumos/ -H "Authorization: Bearer <token>"
 ```
+
+**Con Postman:** importar `docs/postman/GastroMind-Django.postman_collection.json` y ejecutar en orden. *1. Login* guarda el token solo; *2. Insumos* lista, busca, ordena y muestra que un restaurante no ve los insumos de otro (404); *3. Seguridad* prueba sin token y con token alterado (401). Spring tiene que apuntar a la misma BD que Django (`gastromind_demo`).
 
 **Admin de Django** (`/admin/`): necesita las tablas propias de Django (`auth_*`, `django_*`). Se crean en la BD compartida con `python manage.py migrate` y después `python manage.py createsuperuser`. Las migraciones de `catalogo` **no tocan** las tablas de Spring (todas sus tablas son `managed = False`).
 
