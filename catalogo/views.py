@@ -35,6 +35,9 @@ class CategoriaViewSet(viewsets.ModelViewSet):
         restaurante_id = self.request.user.restaurante_id
         return Categoria.objects.filter(restaurante_id=restaurante_id)
 
+    def perform_create(self, serializer):
+        # Asigna el restaurante_id extraído del token al crear la categoría
+        serializer.save(restaurante_id=self.request.user.restaurante_id)
 
 class ProductoViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]

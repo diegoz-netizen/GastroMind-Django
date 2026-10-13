@@ -135,6 +135,14 @@ class ProductoRecetaSerializer(serializers.ModelSerializer):
         model = Producto
         fields = ['id', 'nombre', 'precio', 'categoria', 'categoria_nombre', 'requiere_receta', 'estado', 'detalles_receta']
 
+    def validate_categoria(self, value):
+        # Valida que la categoría seleccionada pertenezca al restaurante del usuario autenticado
+        request = self.context.get('request')
+        if request and hasattr(request, 'user') and hasattr(request.user, 'restaurante_id'):
+            if value.restaurante_id != request.user.restaurante_id:
+                raise serializers.ValidationError("La categoría seleccionada no pertenece a tu restaurante.")
+        return value
+
 
 class GuardarRecetaSerializer(serializers.Serializer):
     detalles = RecetaDetalleWriteSerializer(many=True)
