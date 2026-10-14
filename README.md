@@ -46,7 +46,7 @@ curl -X POST http://localhost:8080/api/auth/login -H "Content-Type: application/
 curl http://localhost:8000/api/catalogo/insumos/ -H "Authorization: Bearer <token>"
 ```
 
-**Con Postman:** importar `docs/postman/GastroMind-Django.postman_collection.json` y ejecutar en orden. *1. Login* guarda el token solo; *2. Insumos* lista, busca, ordena y muestra que un restaurante no ve los insumos de otro (404); *3. Seguridad* prueba sin token y con token alterado (401). Spring tiene que apuntar a la misma BD que Django (`gastromind_demo`).
+**Con Postman:** importar `docs/postman/GastroMind-Django.postman_collection.json` y ejecutar en orden. *1. Login* guarda el token solo; *2. Insumos* lista, busca, ordena y muestra que un restaurante no ve los insumos de otro (404); *3. Registrar insumo* (HU-05) crea un insumo y prueba los 400 de CA-05 (repetido, sin unidad, costo o stock mínimo 0, LIBRE sin dotación); *4. Seguridad* prueba sin token y con token alterado (401). Ojo: la carpeta 3 deja un insumo `Prueba Postman ...` en la BD. Spring tiene que apuntar a la misma BD que Django (`gastromind_demo`).
 
 **Admin de Django** (`/admin/`): necesita las tablas propias de Django (`auth_*`, `django_*`). Se crean en la BD compartida con `python manage.py migrate` y después `python manage.py createsuperuser`. Las migraciones de `catalogo` **no tocan** las tablas de Spring (todas sus tablas son `managed = False`).
 
