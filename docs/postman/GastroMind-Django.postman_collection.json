@@ -29,6 +29,14 @@
     {
       "key": "nombreNuevo",
       "value": ""
+    },
+    {
+      "key": "tomateId",
+      "value": ""
+    },
+    {
+      "key": "pescadoId",
+      "value": ""
     }
   ],
   "item": [
@@ -118,7 +126,8 @@
                   "pm.test('200 OK', () => pm.response.to.have.status(200));",
                   "const n = pm.response.json().map(i => i.nombre);",
                   "pm.test('Trae los insumos de Central', () => pm.expect(n).to.include.members(['Tomate', 'Arroz']));",
-                  "pm.test('No trae insumos de Norte', () => pm.expect(n).to.not.include.members(['Pescado']));"
+                  "pm.test('No trae insumos de Norte', () => pm.expect(n).to.not.include.members(['Pescado']));",
+                  "// Los id cambian según cómo se creó la BD: se buscan por nombre\npm.collectionVariables.set('tomateId', pm.response.json().find(i => i.nombre === 'Tomate').id);"
                 ]
               }
             }
@@ -191,24 +200,7 @@
           ],
           "request": {
             "method": "GET",
-            "url": "{{django}}/api/catalogo/insumos/4/"
-          }
-        },
-        {
-          "name": "Insumo de OTRO restaurante (Pescado, Norte) → 404",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('404: no ve insumos de otro restaurante', () => pm.response.to.have.status(404));"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "url": "{{django}}/api/catalogo/insumos/6/"
+            "url": "{{django}}/api/catalogo/insumos/{{tomateId}}/"
           }
         },
         {
@@ -221,7 +213,8 @@
                   "pm.test('200 OK', () => pm.response.to.have.status(200));",
                   "const n = pm.response.json().map(i => i.nombre);",
                   "pm.test('Trae los insumos de Norte', () => pm.expect(n).to.include.members(['Limón', 'Pescado']));",
-                  "pm.test('No trae insumos de Central', () => pm.expect(n).to.not.include.members(['Tomate']));"
+                  "pm.test('No trae insumos de Central', () => pm.expect(n).to.not.include.members(['Tomate']));",
+                  "pm.collectionVariables.set('pescadoId', pm.response.json().find(i => i.nombre === 'Pescado').id);"
                 ]
               }
             }
@@ -239,6 +232,23 @@
             },
             "method": "GET",
             "url": "{{django}}/api/catalogo/insumos/"
+          }
+        },
+        {
+          "name": "Insumo de OTRO restaurante (Pescado, Norte) → 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('404: no ve insumos de otro restaurante', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{django}}/api/catalogo/insumos/{{pescadoId}}/"
           }
         }
       ]
