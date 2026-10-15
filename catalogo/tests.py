@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+from unittest import mock
 
 import jwt
 from django.conf import settings
@@ -150,7 +151,8 @@ class RegistrarInsumoTest(BaseCatalogoTest):
 
     def assertError400(self, respuesta, campo):
         self.assertEqual(respuesta.status_code, 400, respuesta.content)
-        self.assertIn(campo, respuesta.json())
+        self.assertEqual(respuesta.json()['error'], 'VALIDACION')
+        self.assertIn(campo, respuesta.json()['campos'])
 
     # --- camino feliz ---
 
@@ -233,7 +235,7 @@ class RegistrarInsumoTest(BaseCatalogoTest):
     def test_libre_sin_dotacion_responde_400(self):
         respuesta = self.registrar(tipo_control='LIBRE')
         self.assertError400(respuesta, 'dotacion_cantidad')
-        self.assertIn('dotacion_periodo', respuesta.json())
+        self.assertIn('dotacion_periodo', respuesta.json()['campos'])
 
     def test_libre_con_dotacion_se_registra(self):
         respuesta = self.registrar(nombre='Detergente', unidad_medida='l', tipo_control='LIBRE',
@@ -261,3 +263,61 @@ class RegistrarInsumoTest(BaseCatalogoTest):
     def test_sin_token_responde_401(self):
         self.client.credentials()
         self.assertEqual(self.registrar().status_code, 401)
+
+
+class FormatoErroresTest(BaseCatalogoTest):
+    """HL-014: los errores salen como {error, mensaje, campos?}, con los mismos códigos que Spring."""
+
+    def assertFormato(self, respuesta, status, error):
+        self.assertEqual(respuesta.status_code, status, respuesta.content)
+        cuerpo = respuesta.json()
+        self.assertEqual(cuerpo['error'], error)
+        self.assertIsInstance(cuerpo['mensaje'], str)
+        self.assertNotIn('detail', cuerpo)
+        return cuerpo
+
+    def test_sin_token_401_y_conserva_www_authenticate(self):
+        respuesta = self.client.get(URL)
+        cuerpo = self.assertFormato(respuesta, 401, 'NO_AUTENTICADO')
+        self.assertEqual(cuerpo['mensaje'], 'Tu sesión no es válida o expiró. Vuelve a iniciar sesión.')
+        self.assertEqual(respuesta['WWW-Authenticate'], 'Bearer')
+
+    def test_token_expirado_401_con_su_mensaje(self):
+        self.con_token(token_como_spring(self.admin_central, expira_en=timedelta(seconds=-1)))
+        cuerpo = self.assertFormato(self.client.get(URL), 401, 'NO_AUTENTICADO')
+        self.assertEqual(cuerpo['mensaje'], 'El token expiró.')
+
+    def test_validacion_400_con_un_texto_por_campo(self):
+        self.con_token(token_como_spring(self.admin_central))
+        cuerpo = self.assertFormato(self.client.post(URL, {'nombre': 'Tomate', 'costo_unitario': '0'}, format='json'),
+                                    400, 'VALIDACION')
+        self.assertEqual(cuerpo['campos']['nombre'], 'Ya existe un insumo con ese nombre en el restaurante.')
+        self.assertEqual(cuerpo['campos']['costo_unitario'], 'Debe ser mayor que 0.')
+        self.assertIn('unidad_medida', cuerpo['campos'])
+
+    def test_json_mal_formado_400(self):
+        self.con_token(token_como_spring(self.admin_central))
+        respuesta = self.client.post(URL, '{esto no es json', content_type='application/json')
+        self.assertFormato(respuesta, 400, 'SOLICITUD_INVALIDA')
+
+    def test_rol_sin_permiso_403(self):
+        self.con_token(token_como_spring(self.cocinero_central))
+        cuerpo = self.assertFormato(self.client.post(URL, {}, format='json'), 403, 'SIN_PERMISO')
+        self.assertEqual(cuerpo['mensaje'], 'Se requiere rol ADMINISTRADOR o ALMACENERO.')
+
+    def test_insumo_de_otro_restaurante_404(self):
+        self.con_token(token_como_spring(self.admin_central))
+        self.assertFormato(self.client.get(f'{URL}{self.pollo_norte.id}/'), 404, 'NO_ENCONTRADO')
+
+    def test_metodo_no_permitido_405(self):
+        self.con_token(token_como_spring(self.admin_central))
+        self.assertFormato(self.client.delete(f'{URL}{self.tomate.id}/'), 405, 'METODO_NO_PERMITIDO')
+
+    def test_error_inesperado_500_sin_detalles_internos(self):
+        self.con_token(token_como_spring(self.admin_central))
+        with mock.patch('catalogo.views.IngredienteViewSet.get_queryset', side_effect=RuntimeError('secreto')), \
+                self.assertLogs('config.errores', level='ERROR'):
+            respuesta = self.client.get(URL)
+        cuerpo = self.assertFormato(respuesta, 500, 'ERROR_INTERNO')
+        self.assertNotIn('secreto', respuesta.content.decode())
+        self.assertEqual(set(cuerpo), {'error', 'mensaje'})

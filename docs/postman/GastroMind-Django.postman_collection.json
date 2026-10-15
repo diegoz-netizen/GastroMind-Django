@@ -241,7 +241,8 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('404: no ve insumos de otro restaurante', () => pm.response.to.have.status(404));"
+                  "pm.test('404: no ve insumos de otro restaurante', () => pm.response.to.have.status(404));",
+                  "pm.test('Formato común {error, mensaje} (HL-014)', () => { const r = pm.response.json(); pm.expect(r.error).to.be.a('string'); pm.expect(r.mensaje).to.be.a('string'); });"
                 ]
               }
             }
@@ -314,7 +315,8 @@
               "script": {
                 "exec": [
                   "pm.test('400', () => pm.response.to.have.status(400));",
-                  "pm.test('Error en nombre (repetido en el restaurante)', () => pm.expect(pm.response.json()).to.have.property('nombre'));"
+                  "pm.test('Error en nombre (repetido en el restaurante)', () => pm.expect(pm.response.json().campos).to.have.property('nombre'));",
+                  "pm.test('Formato común {error, mensaje} (HL-014)', () => { const r = pm.response.json(); pm.expect(r.error).to.be.a('string'); pm.expect(r.mensaje).to.be.a('string'); });"
                 ]
               }
             }
@@ -342,9 +344,10 @@
               "script": {
                 "exec": [
                   "pm.test('400', () => pm.response.to.have.status(400));",
-                  "const e = pm.response.json();",
+                  "const e = pm.response.json().campos;",
                   "pm.test('Falta unidad_medida', () => pm.expect(e).to.have.property('unidad_medida'));",
-                  "pm.test('Costo debe ser > 0', () => pm.expect(e).to.have.property('costo_unitario'));"
+                  "pm.test('Costo debe ser > 0', () => pm.expect(e).to.have.property('costo_unitario'));",
+                  "pm.test('Formato común {error, mensaje} (HL-014)', () => { const r = pm.response.json(); pm.expect(r.error).to.be.a('string'); pm.expect(r.mensaje).to.be.a('string'); });"
                 ]
               }
             }
@@ -372,7 +375,8 @@
               "script": {
                 "exec": [
                   "pm.test('400', () => pm.response.to.have.status(400));",
-                  "pm.test('Stock mínimo debe ser > 0', () => pm.expect(pm.response.json()).to.have.property('stock_minimo'));"
+                  "pm.test('Stock mínimo debe ser > 0', () => pm.expect(pm.response.json().campos).to.have.property('stock_minimo'));",
+                  "pm.test('Formato común {error, mensaje} (HL-014)', () => { const r = pm.response.json(); pm.expect(r.error).to.be.a('string'); pm.expect(r.mensaje).to.be.a('string'); });"
                 ]
               }
             }
@@ -400,8 +404,9 @@
               "script": {
                 "exec": [
                   "pm.test('400', () => pm.response.to.have.status(400));",
-                  "const e = pm.response.json();",
-                  "pm.test('Pide dotación y periodo', () => { pm.expect(e).to.have.property('dotacion_cantidad'); pm.expect(e).to.have.property('dotacion_periodo'); });"
+                  "const e = pm.response.json().campos;",
+                  "pm.test('Pide dotación y periodo', () => { pm.expect(e).to.have.property('dotacion_cantidad'); pm.expect(e).to.have.property('dotacion_periodo'); });",
+                  "pm.test('Formato común {error, mensaje} (HL-014)', () => { const r = pm.response.json(); pm.expect(r.error).to.be.a('string'); pm.expect(r.mensaje).to.be.a('string'); });"
                 ]
               }
             }
@@ -433,7 +438,8 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('401', () => pm.response.to.have.status(401));"
+                  "pm.test('401', () => pm.response.to.have.status(401));",
+                  "pm.test('Formato común {error, mensaje} (HL-014)', () => { const r = pm.response.json(); pm.expect(r.error).to.be.a('string'); pm.expect(r.mensaje).to.be.a('string'); });"
                 ]
               }
             }
@@ -453,7 +459,8 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('401', () => pm.response.to.have.status(401));"
+                  "pm.test('401', () => pm.response.to.have.status(401));",
+                  "pm.test('Formato común {error, mensaje} (HL-014)', () => { const r = pm.response.json(); pm.expect(r.error).to.be.a('string'); pm.expect(r.mensaje).to.be.a('string'); });"
                 ]
               }
             }
@@ -480,7 +487,8 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('401', () => pm.response.to.have.status(401));"
+                  "pm.test('401', () => pm.response.to.have.status(401));",
+                  "pm.test('Formato común {error, mensaje} (HL-014)', () => { const r = pm.response.json(); pm.expect(r.error).to.be.a('string'); pm.expect(r.mensaje).to.be.a('string'); });"
                 ]
               }
             }
