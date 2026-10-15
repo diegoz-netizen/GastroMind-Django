@@ -3,7 +3,8 @@ Login único con Spring Boot.
 
 El JWT lo emite Spring (POST /api/auth/login en el repo GastroMind) con HS256 y los claims
 usuario_id, rol_id y restaurante_id. Aquí se valida con la MISMA clave y, igual que el
-JwtAuthenticationFilter de Spring, se exige que el empleado siga ACTIVO en la BD en cada petición.
+JwtAuthenticationFilter de Spring, se exige que el empleado siga ACTIVO en la BD en cada petición
+y que el token no sea anterior a su último cambio de contraseña (claim version_token, HL-035).
 """
 
 import jwt
@@ -52,6 +53,9 @@ class JWTSpringAuthentication(BaseAuthentication):
                     .filter(id=claims['usuario_id']).first())
         if empleado is None or not empleado.esta_activo:
             raise AuthenticationFailed('Su cuenta se encuentra inactiva o no existe.')
+        # HL-035: token emitido antes del último cambio de contraseña (sin el claim = versión 0)
+        if claims.get('version_token', 0) != empleado.version_token:
+            raise AuthenticationFailed('Tu sesión ya no es válida porque la contraseña cambió. Vuelve a iniciar sesión.')
 
         return EmpleadoAutenticado(empleado), claims
 

@@ -93,6 +93,19 @@ class AutenticacionJWTTest(BaseCatalogoTest):
         self.con_token(token_como_spring(fantasma))
         self.assertEqual(self.client.get(URL).status_code, 401)
 
+    def test_token_anterior_al_cambio_de_contrasena_responde_401(self):
+        # HL-035: Spring sube version_token al restablecer la contraseña
+        Empleado.objects.filter(pk=self.admin_central.pk).update(version_token=1)
+        self.con_token(token_como_spring(self.admin_central, version_token=0))
+        self.assertEqual(self.client.get(URL).status_code, 401)
+        self.con_token(token_como_spring(self.admin_central))  # sin el claim = versión 0
+        self.assertEqual(self.client.get(URL).status_code, 401)
+
+    def test_token_con_la_version_actual_responde_200(self):
+        Empleado.objects.filter(pk=self.admin_central.pk).update(version_token=1)
+        self.con_token(token_como_spring(self.admin_central, version_token=1))
+        self.assertEqual(self.client.get(URL).status_code, 200)
+
     def test_token_sin_usuario_id_responde_401(self):
         token = jwt.encode({'sub': 'x', 'exp': datetime.now(timezone.utc) + timedelta(hours=1)},
                            settings.JWT_SECRET, algorithm='HS256')
