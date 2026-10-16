@@ -95,8 +95,9 @@ REST_FRAMEWORK = {
     'EXCEPTION_HANDLER': 'config.errores.manejador_errores',
 }
 
+# CORS: solo el React de Vite (5173), igual que Spring. En producción, el dominio real en el .env
 CORS_ALLOWED_ORIGINS = [o.strip() for o in env(
-    'CORS_ALLOWED_ORIGINS', 'http://localhost:3000,http://localhost:5173,http://localhost:5174').split(',') if o.strip()]
+    'CORS_ALLOWED_ORIGINS', 'http://localhost:5173').split(',') if o.strip()]
 
 
 AUTH_PASSWORD_VALIDATORS = [

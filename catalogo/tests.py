@@ -321,3 +321,20 @@ class FormatoErroresTest(BaseCatalogoTest):
         cuerpo = self.assertFormato(respuesta, 500, 'ERROR_INTERNO')
         self.assertNotIn('secreto', respuesta.content.decode())
         self.assertEqual(set(cuerpo), {'error', 'mensaje'})
+
+
+class CorsTest(TestCase):
+    """CORS: solo el React de Vite (localhost:5173) puede llamar a la API desde el navegador, igual que Spring."""
+
+    def preflight(self, origen):
+        return self.client.options(URL, HTTP_ORIGIN=origen, HTTP_ACCESS_CONTROL_REQUEST_METHOD='POST',
+                                   HTTP_ACCESS_CONTROL_REQUEST_HEADERS='authorization, content-type')
+
+    def test_el_react_de_vite_esta_permitido(self):
+        respuesta = self.preflight('http://localhost:5173')
+        self.assertEqual(respuesta['Access-Control-Allow-Origin'], 'http://localhost:5173')
+
+    def test_otros_origenes_no_reciben_permiso(self):
+        for origen in ('http://localhost:5174', 'http://localhost:3000', 'https://pagina-cualquiera.com'):
+            with self.subTest(origen=origen):
+                self.assertNotIn('Access-Control-Allow-Origin', self.preflight(origen))
