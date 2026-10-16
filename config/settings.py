@@ -91,6 +91,8 @@ JWT_SECRET = env('JWT_SECRET')
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': ['catalogo.authentication.JWTSpringAuthentication'],
     'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.IsAuthenticated'],
+    # HL-014: errores como {error, mensaje, campos?}, igual que Spring
+    'EXCEPTION_HANDLER': 'config.errores.manejador_errores',
 }
 
 CORS_ALLOWED_ORIGINS = [o.strip() for o in env(

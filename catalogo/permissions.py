@@ -1,22 +1,30 @@
-from rest_framework import permissions
+from rest_framework.permissions import SAFE_METHODS, BasePermission
 
 
-class EsAlmaceneroOAdministrador(permissions.BasePermission):
+class EsAdminOAlmaceneroParaEscribir(BasePermission):
     """
-    Permite lectura (GET) a cualquier usuario autenticado del restaurante.
-    Solo permite crear (POST) a usuarios con rol ALMACENERO o ADMINISTRADOR.
+    Leer: cualquier empleado autenticado de su restaurante.
+    Escribir (HU-05, "encargado de almacén"): solo ADMINISTRADOR o ALMACENERO; el resto recibe 403.
     """
+
+    ROLES_ESCRITURA = {'ADMINISTRADOR', 'ALMACENERO'}
+    message = 'Se requiere rol ADMINISTRADOR o ALMACENERO.'
+
     def has_permission(self, request, view):
-        if not request.user or not request.user.is_authenticated:
-            return False
-
-        if request.method in permissions.SAFE_METHODS:
+        if request.method in SAFE_METHODS:
             return True
+        return request.user.rol.upper() in self.ROLES_ESCRITURA
 
-        rol = getattr(request.user, 'rol_nombre', None) or getattr(request.user, 'rol', None)
-        if hasattr(rol, 'nombre'):
-            rol_str = rol.nombre.upper()
-        else:
-            rol_str = str(rol).upper() if rol else ''
 
-        return 'ALMACENERO' in rol_str or 'ADMIN' in rol_str
+class EsAdminParaEscribir(BasePermission):
+    """
+    Leer: cualquier empleado autenticado de su restaurante.
+    Escribir (HU-06 y HU-07, "yo como gerente"): solo ADMINISTRADOR; el resto recibe 403.
+    """
+
+    message = 'Se requiere rol ADMINISTRADOR.'
+
+    def has_permission(self, request, view):
+        if request.method in SAFE_METHODS:
+            return True
+        return request.user.rol.upper() == 'ADMINISTRADOR'

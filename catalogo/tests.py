@@ -1,12 +1,13 @@
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+from unittest import mock
 
 import jwt
 from django.conf import settings
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from .models import Empleado, Ingrediente, Restaurante, Rol
+from .models import Categoria, Empleado, Ingrediente, Producto, RecetaDetalle, Restaurante, Rol
 
 URL = '/api/catalogo/insumos/'
 
@@ -150,7 +151,8 @@ class RegistrarInsumoTest(BaseCatalogoTest):
 
     def assertError400(self, respuesta, campo):
         self.assertEqual(respuesta.status_code, 400, respuesta.content)
-        self.assertIn(campo, respuesta.json())
+        self.assertEqual(respuesta.json()['error'], 'VALIDACION')
+        self.assertIn(campo, respuesta.json()['campos'])
 
     # --- camino feliz ---
 
@@ -233,7 +235,7 @@ class RegistrarInsumoTest(BaseCatalogoTest):
     def test_libre_sin_dotacion_responde_400(self):
         respuesta = self.registrar(tipo_control='LIBRE')
         self.assertError400(respuesta, 'dotacion_cantidad')
-        self.assertIn('dotacion_periodo', respuesta.json())
+        self.assertIn('dotacion_periodo', respuesta.json()['campos'])
 
     def test_libre_con_dotacion_se_registra(self):
         respuesta = self.registrar(nombre='Detergente', unidad_medida='l', tipo_control='LIBRE',
@@ -261,3 +263,185 @@ class RegistrarInsumoTest(BaseCatalogoTest):
     def test_sin_token_responde_401(self):
         self.client.credentials()
         self.assertEqual(self.registrar().status_code, 401)
+
+
+class FormatoErroresTest(BaseCatalogoTest):
+    """HL-014: los errores salen como {error, mensaje, campos?}, con los mismos códigos que Spring."""
+
+    def assertFormato(self, respuesta, status, error):
+        self.assertEqual(respuesta.status_code, status, respuesta.content)
+        cuerpo = respuesta.json()
+        self.assertEqual(cuerpo['error'], error)
+        self.assertIsInstance(cuerpo['mensaje'], str)
+        self.assertNotIn('detail', cuerpo)
+        return cuerpo
+
+    def test_sin_token_401_y_conserva_www_authenticate(self):
+        respuesta = self.client.get(URL)
+        cuerpo = self.assertFormato(respuesta, 401, 'NO_AUTENTICADO')
+        self.assertEqual(cuerpo['mensaje'], 'Tu sesión no es válida o expiró. Vuelve a iniciar sesión.')
+        self.assertEqual(respuesta['WWW-Authenticate'], 'Bearer')
+
+    def test_token_expirado_401_con_su_mensaje(self):
+        self.con_token(token_como_spring(self.admin_central, expira_en=timedelta(seconds=-1)))
+        cuerpo = self.assertFormato(self.client.get(URL), 401, 'NO_AUTENTICADO')
+        self.assertEqual(cuerpo['mensaje'], 'El token expiró.')
+
+    def test_validacion_400_con_un_texto_por_campo(self):
+        self.con_token(token_como_spring(self.admin_central))
+        cuerpo = self.assertFormato(self.client.post(URL, {'nombre': 'Tomate', 'costo_unitario': '0'}, format='json'),
+                                    400, 'VALIDACION')
+        self.assertEqual(cuerpo['campos']['nombre'], 'Ya existe un insumo con ese nombre en el restaurante.')
+        self.assertEqual(cuerpo['campos']['costo_unitario'], 'Debe ser mayor que 0.')
+        self.assertIn('unidad_medida', cuerpo['campos'])
+
+    def test_json_mal_formado_400(self):
+        self.con_token(token_como_spring(self.admin_central))
+        respuesta = self.client.post(URL, '{esto no es json', content_type='application/json')
+        self.assertFormato(respuesta, 400, 'SOLICITUD_INVALIDA')
+
+    def test_rol_sin_permiso_403(self):
+        self.con_token(token_como_spring(self.cocinero_central))
+        cuerpo = self.assertFormato(self.client.post(URL, {}, format='json'), 403, 'SIN_PERMISO')
+        self.assertEqual(cuerpo['mensaje'], 'Se requiere rol ADMINISTRADOR o ALMACENERO.')
+
+    def test_insumo_de_otro_restaurante_404(self):
+        self.con_token(token_como_spring(self.admin_central))
+        self.assertFormato(self.client.get(f'{URL}{self.pollo_norte.id}/'), 404, 'NO_ENCONTRADO')
+
+    def test_metodo_no_permitido_405(self):
+        self.con_token(token_como_spring(self.admin_central))
+        self.assertFormato(self.client.delete(f'{URL}{self.tomate.id}/'), 405, 'METODO_NO_PERMITIDO')
+
+    def test_error_inesperado_500_sin_detalles_internos(self):
+        self.con_token(token_como_spring(self.admin_central))
+        with mock.patch('catalogo.views.IngredienteViewSet.get_queryset', side_effect=RuntimeError('secreto')), \
+                self.assertLogs('config.errores', level='ERROR'):
+            respuesta = self.client.get(URL)
+        cuerpo = self.assertFormato(respuesta, 500, 'ERROR_INTERNO')
+        self.assertNotIn('secreto', respuesta.content.decode())
+        self.assertEqual(set(cuerpo), {'error', 'mensaje'})
+
+
+class RecetaPlatilloTest(BaseCatalogoTest):
+    """HU-06 / CA-06: al menos un insumo con cantidad > 0 y sin insumos repetidos. Escribe solo el admin."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.fondos = Categoria.objects.create(restaurante=cls.central, nombre='Fondos')
+        cls.arroz_con_tomate = Producto.objects.create(categoria=cls.fondos, nombre='Arroz con tomate',
+                                                       precio=Decimal('18.00'))
+        cls.bebidas_norte = Categoria.objects.create(restaurante=cls.norte, nombre='Bebidas')
+        cls.limonada_norte = Producto.objects.create(categoria=cls.bebidas_norte, nombre='Limonada',
+                                                     precio=Decimal('6.00'))
+
+    def url_receta(self, producto):
+        return f'/api/catalogo/productos/{producto.id}/receta/'
+
+    def guardar(self, producto, detalles, empleado=None):
+        self.con_token(token_como_spring(empleado or self.admin_central))
+        return self.client.post(self.url_receta(producto), {'detalles': detalles}, format='json')
+
+    def test_admin_guarda_la_receta_y_se_puede_consultar(self):
+        r = self.guardar(self.arroz_con_tomate, [
+            {'ingrediente': self.arroz.id, 'cantidad_requerida': '0.200'},
+            {'ingrediente': self.tomate.id, 'cantidad_requerida': '0.150'},
+        ])
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(len(r.json()['detalles_receta']), 2)
+        r = self.client.get(self.url_receta(self.arroz_con_tomate))
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual({d['ingrediente_nombre'] for d in r.json()['detalles_receta']}, {'Arroz', 'Tomate'})
+
+    def test_guardar_otra_vez_reemplaza_la_receta(self):
+        self.guardar(self.arroz_con_tomate, [{'ingrediente': self.arroz.id, 'cantidad_requerida': '0.200'}])
+        self.guardar(self.arroz_con_tomate, [{'ingrediente': self.tomate.id, 'cantidad_requerida': '0.100'}])
+        detalles = RecetaDetalle.objects.filter(producto=self.arroz_con_tomate)
+        self.assertEqual([d.ingrediente_id for d in detalles], [self.tomate.id])
+
+    def test_receta_sin_insumos_responde_400(self):
+        r = self.guardar(self.arroz_con_tomate, [])
+        self.assertEqual(r.status_code, 400)
+
+    def test_cantidad_cero_o_negativa_responde_400(self):
+        for cantidad in ('0', '-1'):
+            r = self.guardar(self.arroz_con_tomate, [{'ingrediente': self.arroz.id, 'cantidad_requerida': cantidad}])
+            self.assertEqual(r.status_code, 400, cantidad)
+        self.assertFalse(RecetaDetalle.objects.exists())
+
+    def test_insumo_repetido_responde_400(self):
+        r = self.guardar(self.arroz_con_tomate, [
+            {'ingrediente': self.arroz.id, 'cantidad_requerida': '0.200'},
+            {'ingrediente': self.arroz.id, 'cantidad_requerida': '0.100'},
+        ])
+        self.assertEqual(r.status_code, 400)
+        self.assertFalse(RecetaDetalle.objects.exists())
+
+    def test_insumo_de_otro_restaurante_responde_400(self):
+        r = self.guardar(self.arroz_con_tomate, [{'ingrediente': self.pollo_norte.id, 'cantidad_requerida': '0.300'}])
+        self.assertEqual(r.status_code, 400)
+        self.assertFalse(RecetaDetalle.objects.exists())
+
+    def test_un_error_no_borra_la_receta_anterior(self):
+        self.guardar(self.arroz_con_tomate, [{'ingrediente': self.arroz.id, 'cantidad_requerida': '0.200'}])
+        self.guardar(self.arroz_con_tomate, [{'ingrediente': self.tomate.id, 'cantidad_requerida': '0'}])
+        self.assertEqual(RecetaDetalle.objects.filter(producto=self.arroz_con_tomate).count(), 1)
+
+    def test_producto_de_otro_restaurante_responde_404(self):
+        r = self.guardar(self.limonada_norte, [{'ingrediente': self.arroz.id, 'cantidad_requerida': '0.200'}])
+        self.assertEqual(r.status_code, 404)
+
+    def test_cocinero_no_puede_guardar_la_receta_pero_si_consultarla(self):
+        r = self.guardar(self.arroz_con_tomate, [{'ingrediente': self.arroz.id, 'cantidad_requerida': '0.200'}],
+                         empleado=self.cocinero_central)
+        self.assertEqual(r.status_code, 403)
+        self.assertEqual(r.json()['mensaje'], 'Se requiere rol ADMINISTRADOR.')
+        self.assertEqual(self.client.get(self.url_receta(self.arroz_con_tomate)).status_code, 200)
+
+    def test_sin_token_responde_401(self):
+        r = self.client.post(self.url_receta(self.arroz_con_tomate), {'detalles': []}, format='json')
+        self.assertEqual(r.status_code, 401)
+
+
+class CartaPermisosTest(BaseCatalogoTest):
+    """Categorías y productos: cualquier empleado consulta los de su restaurante; solo el admin escribe."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.fondos = Categoria.objects.create(restaurante=cls.central, nombre='Fondos')
+        cls.bebidas_norte = Categoria.objects.create(restaurante=cls.norte, nombre='Bebidas')
+
+    def test_admin_crea_categoria_en_su_restaurante(self):
+        self.con_token(token_como_spring(self.admin_central))
+        r = self.client.post('/api/catalogo/categorias/', {'nombre': 'Postres', 'restaurante': self.norte.id},
+                             format='json')
+        self.assertEqual(r.status_code, 201)
+        self.assertEqual(Categoria.objects.get(nombre='Postres').restaurante_id, self.central.id)
+
+    def test_admin_crea_producto(self):
+        self.con_token(token_como_spring(self.admin_central))
+        r = self.client.post('/api/catalogo/productos/',
+                             {'nombre': 'Lomo saltado', 'precio': '25.00', 'categoria': self.fondos.id}, format='json')
+        self.assertEqual(r.status_code, 201)
+
+    def test_producto_con_categoria_de_otro_restaurante_responde_400(self):
+        self.con_token(token_como_spring(self.admin_central))
+        r = self.client.post('/api/catalogo/productos/',
+                             {'nombre': 'Chicha', 'precio': '5.00', 'categoria': self.bebidas_norte.id}, format='json')
+        self.assertEqual(r.status_code, 400)
+
+    def test_cocinero_no_puede_crear_categoria_ni_producto(self):
+        self.con_token(token_como_spring(self.cocinero_central))
+        r = self.client.post('/api/catalogo/categorias/', {'nombre': 'Postres'}, format='json')
+        self.assertEqual(r.status_code, 403)
+        r = self.client.post('/api/catalogo/productos/',
+                             {'nombre': 'Lomo saltado', 'precio': '25.00', 'categoria': self.fondos.id}, format='json')
+        self.assertEqual(r.status_code, 403)
+
+    def test_cada_restaurante_ve_solo_sus_categorias(self):
+        self.con_token(token_como_spring(self.cocinero_central))
+        r = self.client.get('/api/catalogo/categorias/')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual([c['nombre'] for c in r.json()], ['Fondos'])
