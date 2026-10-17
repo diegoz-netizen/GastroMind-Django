@@ -124,6 +124,12 @@ class Categoria(models.Model):
 
 
 class Producto(models.Model):
+    """HU-07: platillo de la carta. Se desactiva en vez de borrarse (CA-07)."""
+
+    ACTIVO = 'ACTIVO'
+    INACTIVO = 'INACTIVO'
+    ESTADOS = [ACTIVO, INACTIVO]  # CHECK de la tabla producto
+
     id = models.AutoField(primary_key=True)
     categoria = models.ForeignKey(
         Categoria, 
@@ -134,7 +140,7 @@ class Producto(models.Model):
     nombre = models.CharField(max_length=150)
     precio = models.DecimalField(max_digits=10, decimal_places=2)
     requiere_receta = models.BooleanField(default=True)
-    estado = models.CharField(max_length=20, default='ACTIVO')
+    estado = models.CharField(max_length=20, default=ACTIVO)
 
     class Meta:
         managed = False

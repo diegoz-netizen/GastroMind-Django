@@ -88,12 +88,22 @@ class RecetaDetalleWriteSerializer(serializers.ModelSerializer):
 
 
 class ProductoRecetaSerializer(serializers.ModelSerializer):
+    """
+    HU-07: el gerente crea y edita platillos con su precio. El estado no se cambia aquí:
+    va por PATCH /productos/{id}/estado/ (CA-07: desactivar, nunca borrar).
+    """
+
+    nombre = serializers.CharField(max_length=150, trim_whitespace=True)
+    # La BD acepta 0 (CHECK precio >= 0), pero un platillo de la carta se vende: precio > 0
+    precio = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=Decimal('0.01'),
+                                      error_messages={'min_value': MAYOR_QUE_CERO})
     categoria_nombre = serializers.ReadOnlyField(source='categoria.nombre')
     detalles_receta = RecetaDetalleReadSerializer(many=True, read_only=True)
 
     class Meta:
         model = Producto
         fields = ['id', 'nombre', 'precio', 'categoria', 'categoria_nombre', 'requiere_receta', 'estado', 'detalles_receta']
+        read_only_fields = ['estado']
 
     def validate_categoria(self, value):
         # Valida que la categoría seleccionada pertenezca al restaurante del usuario autenticado
@@ -102,6 +112,12 @@ class ProductoRecetaSerializer(serializers.ModelSerializer):
             if value.restaurante_id != request.user.restaurante_id:
                 raise serializers.ValidationError("La categoría seleccionada no pertenece a tu restaurante.")
         return value
+
+
+class EstadoProductoSerializer(serializers.Serializer):
+    """HU-07 / CA-07: un platillo se activa o se desactiva; nunca se borra (queda en el historial de ventas)."""
+
+    estado = serializers.ChoiceField(choices=Producto.ESTADOS)
 
 
 class GuardarRecetaSerializer(serializers.Serializer):

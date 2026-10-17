@@ -7,7 +7,8 @@ from rest_framework.response import Response
 
 from .models import Categoria, Ingrediente, Producto
 from .permissions import EsAdminOAlmaceneroParaEscribir, EsAdminParaEscribir
-from .serializers import CategoriaSerializer, GuardarRecetaSerializer, IngredienteSerializer, ProductoRecetaSerializer
+from .serializers import (CategoriaSerializer, EstadoProductoSerializer, GuardarRecetaSerializer, IngredienteSerializer,
+                          ProductoRecetaSerializer)
 
 
 class IngredienteViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelViewSet):
@@ -51,12 +52,38 @@ class CategoriaViewSet(viewsets.ModelViewSet):
 
 
 class ProductoViewSet(viewsets.ModelViewSet):
+    """
+    HU-07 Gestionar la carta (escribe solo el ADMINISTRADOR):
+    GET   /api/catalogo/productos/               platillos del restaurante del token (?estado=ACTIVO para la toma de pedidos)
+    POST  /api/catalogo/productos/               crea un platillo (nace ACTIVO)
+    PUT/PATCH /api/catalogo/productos/{id}/      edita nombre, precio, categoría o requiere_receta
+    PATCH /api/catalogo/productos/{id}/estado/   activa o desactiva (CA-07)
+    DELETE no existe (405): un platillo desactivado se conserva en el historial de ventas.
+    """
+
     permission_classes = [IsAuthenticated, EsAdminParaEscribir]
     serializer_class = ProductoRecetaSerializer
+    http_method_names = ['get', 'post', 'put', 'patch', 'head', 'options']
 
     def get_queryset(self):
         restaurante_id = self.request.user.restaurante_id
-        return Producto.objects.filter(categoria__restaurante_id=restaurante_id)
+        productos = (Producto.objects.filter(categoria__restaurante_id=restaurante_id)
+                     .select_related('categoria').order_by('categoria__nombre', 'nombre'))
+        estado = self.request.query_params.get('estado')
+        if estado is not None and self.action == 'list':
+            if estado not in Producto.ESTADOS:
+                raise ValidationError({'estado': [f'Debe ser {" o ".join(Producto.ESTADOS)}.']})
+            productos = productos.filter(estado=estado)
+        return productos
+
+    @action(detail=True, methods=['patch'], url_path='estado')
+    def estado(self, request, pk=None):
+        producto = self.get_object()
+        serializer = EstadoProductoSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        producto.estado = serializer.validated_data['estado']
+        producto.save(update_fields=['estado'])
+        return Response(ProductoRecetaSerializer(producto).data)
 
     @action(detail=True, methods=['post', 'get'], url_path='receta')
     def receta(self, request, pk=None):
