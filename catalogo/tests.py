@@ -445,3 +445,136 @@ class CartaPermisosTest(BaseCatalogoTest):
         r = self.client.get('/api/catalogo/categorias/')
         self.assertEqual(r.status_code, 200)
         self.assertEqual([c['nombre'] for c in r.json()], ['Fondos'])
+
+
+class GestionCartaTest(BaseCatalogoTest):
+    """HU-07 / CA-07: el gerente crea, edita y desactiva platillos; el desactivado no sale para pedidos pero no se borra."""
+
+    URL = '/api/catalogo/productos/'
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.fondos = Categoria.objects.create(restaurante=cls.central, nombre='Fondos')
+        cls.bebidas = Categoria.objects.create(restaurante=cls.central, nombre='Bebidas')
+        cls.bebidas_norte = Categoria.objects.create(restaurante=cls.norte, nombre='Bebidas')
+        cls.lomo = Producto.objects.create(categoria=cls.fondos, nombre='Lomo saltado', precio=Decimal('28.00'))
+        cls.chicha = Producto.objects.create(categoria=cls.bebidas, nombre='Chicha morada', precio=Decimal('6.00'),
+                                             requiere_receta=False)
+        cls.limonada_norte = Producto.objects.create(categoria=cls.bebidas_norte, nombre='Limonada',
+                                                     precio=Decimal('5.00'))
+        RecetaDetalle.objects.create(producto=cls.lomo, ingrediente=cls.arroz, cantidad_requerida=Decimal('0.200'))
+
+    def setUp(self):
+        super().setUp()
+        self.con_token(token_como_spring(self.admin_central))
+
+    def url(self, producto, extra=''):
+        return f'{self.URL}{producto.id}/{extra}'
+
+    def desactivar(self, producto):
+        return self.client.patch(self.url(producto, 'estado/'), {'estado': 'INACTIVO'}, format='json')
+
+    # --- Crear ---
+    def test_admin_crea_platillo_con_su_precio_y_nace_activo(self):
+        r = self.client.post(self.URL, {'nombre': '  Arroz con pollo ', 'precio': '22.50', 'categoria': self.fondos.id,
+                                        'estado': 'INACTIVO'}, format='json')
+        self.assertEqual(r.status_code, 201, r.content)
+        platillo = Producto.objects.get(id=r.json()['id'])
+        self.assertEqual((platillo.nombre, platillo.precio, platillo.estado),
+                         ('Arroz con pollo', Decimal('22.50'), 'ACTIVO'))
+
+    def test_precio_cero_o_negativo_responde_400(self):
+        for precio in ('0', '-3'):
+            r = self.client.post(self.URL, {'nombre': 'Gratis', 'precio': precio, 'categoria': self.fondos.id},
+                                 format='json')
+            self.assertEqual(r.status_code, 400)
+            self.assertEqual(r.json()['campos']['precio'], 'Debe ser mayor que 0.')
+        self.assertFalse(Producto.objects.filter(nombre='Gratis').exists())
+
+    def test_sin_nombre_precio_ni_categoria_responde_400_por_campo(self):
+        r = self.client.post(self.URL, {'nombre': '   '}, format='json')
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(set(r.json()['campos']), {'nombre', 'precio', 'categoria'})
+
+    # --- Editar ---
+    def test_admin_edita_nombre_precio_y_categoria(self):
+        r = self.client.patch(self.url(self.chicha), {'nombre': 'Chicha morada (jarra)', 'precio': '18.00',
+                                                      'categoria': self.fondos.id}, format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+        self.chicha.refresh_from_db()
+        self.assertEqual((self.chicha.nombre, self.chicha.precio, self.chicha.categoria_id),
+                         ('Chicha morada (jarra)', Decimal('18.00'), self.fondos.id))
+
+    def test_editar_no_cambia_el_estado(self):
+        r = self.client.patch(self.url(self.lomo), {'estado': 'INACTIVO'}, format='json')
+        self.assertEqual(r.status_code, 200)
+        self.lomo.refresh_from_db()
+        self.assertEqual(self.lomo.estado, 'ACTIVO')
+
+    def test_editar_con_precio_cero_responde_400_y_no_guarda(self):
+        r = self.client.patch(self.url(self.lomo), {'precio': '0'}, format='json')
+        self.assertEqual(r.status_code, 400)
+        self.lomo.refresh_from_db()
+        self.assertEqual(self.lomo.precio, Decimal('28.00'))
+
+    def test_editar_con_categoria_de_otro_restaurante_responde_400(self):
+        r = self.client.patch(self.url(self.lomo), {'categoria': self.bebidas_norte.id}, format='json')
+        self.assertEqual(r.status_code, 400)
+
+    # --- Desactivar (CA-07) ---
+    def test_desactivar_lo_saca_de_la_carta_para_pedidos(self):
+        r = self.desactivar(self.lomo)
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(r.json()['estado'], 'INACTIVO')
+        para_pedidos = self.client.get(self.URL, {'estado': 'ACTIVO'}).json()
+        self.assertEqual([p['nombre'] for p in para_pedidos], ['Chicha morada'])
+
+    def test_desactivado_se_conserva_con_su_receta(self):
+        self.desactivar(self.lomo)
+        self.assertTrue(Producto.objects.filter(id=self.lomo.id, estado='INACTIVO').exists())
+        detalle = self.client.get(self.url(self.lomo))
+        self.assertEqual(detalle.status_code, 200)
+        self.assertEqual(len(detalle.json()['detalles_receta']), 1)
+        todos = self.client.get(self.URL).json()
+        self.assertEqual({p['nombre']: p['estado'] for p in todos},
+                         {'Chicha morada': 'ACTIVO', 'Lomo saltado': 'INACTIVO'})
+
+    def test_reactivar_lo_devuelve_a_la_carta(self):
+        self.desactivar(self.lomo)
+        r = self.client.patch(self.url(self.lomo, 'estado/'), {'estado': 'ACTIVO'}, format='json')
+        self.assertEqual(r.status_code, 200)
+        self.assertIn('Lomo saltado', [p['nombre'] for p in self.client.get(self.URL, {'estado': 'ACTIVO'}).json()])
+
+    def test_estado_invalido_responde_400(self):
+        r = self.client.patch(self.url(self.lomo, 'estado/'), {'estado': 'BORRADO'}, format='json')
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('estado', r.json()['campos'])
+        r = self.client.get(self.URL, {'estado': 'otro'})
+        self.assertEqual(r.status_code, 400)
+
+    def test_borrar_no_existe_405_y_el_platillo_sigue(self):
+        r = self.client.delete(self.url(self.lomo))
+        self.assertEqual(r.status_code, 405)
+        self.assertEqual(r.json()['error'], 'METODO_NO_PERMITIDO')
+        self.assertTrue(Producto.objects.filter(id=self.lomo.id).exists())
+
+    # --- Permisos y restaurante ---
+    def test_cocinero_consulta_pero_no_edita_ni_desactiva(self):
+        self.con_token(token_como_spring(self.cocinero_central))
+        self.assertEqual(self.client.get(self.URL).status_code, 200)
+        self.assertEqual(self.client.patch(self.url(self.lomo), {'precio': '1.00'}, format='json').status_code, 403)
+        self.assertEqual(self.desactivar(self.lomo).status_code, 403)
+        self.lomo.refresh_from_db()
+        self.assertEqual((self.lomo.precio, self.lomo.estado), (Decimal('28.00'), 'ACTIVO'))
+
+    def test_platillo_de_otro_restaurante_responde_404(self):
+        self.assertEqual(self.client.patch(self.url(self.limonada_norte), {'precio': '1.00'},
+                                           format='json').status_code, 404)
+        self.assertEqual(self.desactivar(self.limonada_norte).status_code, 404)
+        self.limonada_norte.refresh_from_db()
+        self.assertEqual(self.limonada_norte.estado, 'ACTIVO')
+
+    def test_sin_token_responde_401(self):
+        self.client.credentials()
+        self.assertEqual(self.desactivar(self.lomo).status_code, 401)
