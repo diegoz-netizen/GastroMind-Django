@@ -1,8 +1,8 @@
 """
-Modelos sobre las tablas que YA existen en la BD compartida (docs/script_database.sql del repo GastroMind).
+Modelos sobre las tablas que YA existen en la BD compartida (docs/script_database.sql).
 
 managed = False: Django lee y escribe DATOS (CRUD), pero nunca crea ni altera estas tablas.
-La estructura la controla el script SQL; así no chocamos con Spring Boot.
+La estructura la controla el script SQL.
 """
 
 from django.db import models
@@ -38,9 +38,18 @@ class Empleado(models.Model):
     ACTIVO = 'ACTIVO'
 
     id = models.AutoField(primary_key=True)
-    restaurante = models.ForeignKey(Restaurante, on_delete=models.PROTECT, db_column='restaurante_id',
-                                    related_name='empleados')
-    rol = models.ForeignKey(Rol, on_delete=models.PROTECT, db_column='rol_id', related_name='empleados')
+    restaurante = models.ForeignKey(
+        Restaurante, 
+        on_delete=models.PROTECT, 
+        db_column='restaurante_id',
+        related_name='empleados'
+    )
+    rol = models.ForeignKey(
+        Rol, 
+        on_delete=models.PROTECT, 
+        db_column='rol_id', 
+        related_name='empleados'
+    )
     nombre_completo = models.CharField(max_length=150)
     correo = models.CharField(max_length=150, unique=True)
     password_hash = models.CharField(max_length=255)
@@ -67,8 +76,12 @@ class Ingrediente(models.Model):
     DOTACION_PERIODO = [('SEMANAL', 'Semanal'), ('MENSUAL', 'Mensual')]
 
     id = models.AutoField(primary_key=True)
-    restaurante = models.ForeignKey(Restaurante, on_delete=models.PROTECT, db_column='restaurante_id',
-                                    related_name='ingredientes')
+    restaurante = models.ForeignKey(
+        Restaurante, 
+        on_delete=models.PROTECT, 
+        db_column='restaurante_id',
+        related_name='ingredientes'
+    )
     nombre = models.CharField(max_length=150)
     unidad_medida = models.CharField(max_length=20)
     stock_actual = models.DecimalField(max_digits=10, decimal_places=2, default=0)
@@ -90,3 +103,73 @@ class Ingrediente(models.Model):
     @property
     def bajo_stock_minimo(self):
         return self.stock_actual < self.stock_minimo
+
+
+class Categoria(models.Model):
+    id = models.AutoField(primary_key=True)
+    restaurante = models.ForeignKey(
+        Restaurante,
+        on_delete=models.PROTECT,
+        db_column='restaurante_id',
+        related_name='categorias'
+    )
+    nombre = models.CharField(max_length=100)
+
+    class Meta:
+        managed = False
+        db_table = 'categoria'
+
+    def __str__(self):
+        return self.nombre
+
+
+class Producto(models.Model):
+    """HU-07: platillo de la carta. Se desactiva en vez de borrarse (CA-07)."""
+
+    ACTIVO = 'ACTIVO'
+    INACTIVO = 'INACTIVO'
+    ESTADOS = [ACTIVO, INACTIVO]  # CHECK de la tabla producto
+
+    id = models.AutoField(primary_key=True)
+    categoria = models.ForeignKey(
+        Categoria, 
+        on_delete=models.CASCADE, 
+        db_column='categoria_id',
+        related_name='productos'
+    )
+    nombre = models.CharField(max_length=150)
+    precio = models.DecimalField(max_digits=10, decimal_places=2)
+    requiere_receta = models.BooleanField(default=True)
+    estado = models.CharField(max_length=20, default=ACTIVO)
+
+    class Meta:
+        managed = False
+        db_table = 'producto'
+
+    def __str__(self):
+        return self.nombre
+
+
+class RecetaDetalle(models.Model):
+    id = models.AutoField(primary_key=True)
+    producto = models.ForeignKey(
+        Producto, 
+        on_delete=models.CASCADE, 
+        related_name='detalles_receta', 
+        db_column='producto_id'
+    )
+    ingrediente = models.ForeignKey(
+        Ingrediente, 
+        on_delete=models.CASCADE, 
+        db_column='ingrediente_id',
+        related_name='recetas'
+    )
+    cantidad_requerida = models.DecimalField(max_digits=10, decimal_places=3)
+
+    class Meta:
+        managed = False
+        db_table = 'receta_detalle'
+        unique_together = [('producto', 'ingrediente')]
+
+    def __str__(self):
+        return f"{self.producto.nombre} - {self.ingrediente.nombre} ({self.cantidad_requerida})"
