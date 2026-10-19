@@ -99,3 +99,17 @@ Igual que en el repo principal: una rama por tarea (`feature/HU-xx-...`), Pull R
 ## Equipo
 
 Diego Panez · Victor Santamaría · Piero Guevara
+
+## Frontend React (Laboratorio 09)
+
+La carpeta [`frontend/`](frontend/) tiene una **maqueta en React + Vite** del catálogo (insumos, platillos con su receta y costo) y del personal, con datos escritos a mano que tienen la misma forma que la API. Todavía no consume la API (Semana 12) y no reemplaza a `web-react` de GastroMind-SpringBoot.
+
+```bash
+cd frontend
+npm install       # dependencias en node_modules/ (no se sube)
+npm run dev       # http://localhost:5173/
+npm run lint      # oxlint
+npm run build     # versión de producción en dist/ (no se sube)
+```
+
+Detalle de lo que muestra en [`frontend/README.md`](frontend/README.md).

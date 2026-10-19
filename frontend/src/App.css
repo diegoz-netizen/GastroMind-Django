@@ -1,0 +1,137 @@
+.app {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 32px 20px;
+  font-family: 'Segoe UI', Roboto, Arial, sans-serif;
+  color: #1f2937;
+}
+
+.encabezado {
+  padding: 20px 24px;
+  border-radius: 10px;
+  background-color: #1a73e8;
+  color: #ffffff;
+}
+
+.encabezado h1 {
+  margin: 0 0 6px;
+  font-size: 26px;
+}
+
+.encabezado p {
+  margin: 0;
+}
+
+.seccion {
+  margin-top: 28px;
+}
+
+.seccion h2 {
+  margin: 0 0 12px;
+  font-size: 19px;
+  color: #1a73e8;
+}
+
+.lista {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fila {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.nombre {
+  min-width: 190px;
+  font-weight: 600;
+}
+
+.etiqueta {
+  padding: 2px 10px;
+  border-radius: 12px;
+  background-color: #e6f4ea;
+  color: #137333;
+  font-size: 13px;
+}
+
+.etiqueta.agotado {
+  background-color: #fce8e6;
+  color: #c5221f;
+}
+
+.aviso {
+  color: #b06000;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.vacio {
+  color: #6b7280;
+  font-style: italic;
+}
+
+.platillos {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.tarjeta {
+  padding: 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background-color: #f9fafb;
+}
+
+.seccion > .tarjeta + .tarjeta {
+  margin-top: 12px;
+}
+
+.tarjeta h3 {
+  margin: 0 0 8px;
+  font-size: 16px;
+}
+
+.tarjeta small {
+  color: #6b7280;
+  font-weight: 400;
+}
+
+.sublista {
+  margin: 0 0 8px;
+  padding-left: 18px;
+  font-size: 14px;
+}
+
+.total {
+  margin: 8px 0 6px;
+  font-weight: 600;
+}
+
+.barra {
+  height: 8px;
+  border-radius: 4px;
+  background-color: #e5e7eb;
+  overflow: hidden;
+}
+
+.barra-relleno {
+  height: 100%;
+  background-color: #f9ab00;
+}
+
+.barra-relleno.activos {
+  background-color: #34a853;
+}
+
+.detalle {
+  margin: 4px 0 0;
+  color: #6b7280;
+  font-size: 13px;
+}
