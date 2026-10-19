@@ -46,9 +46,28 @@ curl -X POST http://localhost:8080/api/auth/login -H "Content-Type: application/
 curl http://localhost:8000/api/catalogo/insumos/ -H "Authorization: Bearer <token>"
 ```
 
-**Con Postman:** importar `docs/postman/GastroMind-Django.postman_collection.json` y ejecutar en orden. *1. Login* guarda el token solo; *2. Insumos* lista, busca, ordena y muestra que un restaurante no ve los insumos de otro (404); *3. Seguridad* prueba sin token y con token alterado (401). Spring tiene que apuntar a la misma BD que Django (`gastromind_demo`).
+**Con Postman:** importar `docs/postman/GastroMind-Django.postman_collection.json` y ejecutar en orden. *1. Login* guarda el token solo; *2. Insumos* lista, busca, ordena y muestra que un restaurante no ve los insumos de otro (404); *3. Registrar insumo* (HU-05) crea un insumo y prueba los 400 de CA-05 (repetido, sin unidad, costo o stock mínimo 0, LIBRE sin dotación); *4. Seguridad* prueba sin token y con token alterado (401). Ojo: la carpeta 3 deja un insumo `Prueba Postman ...` en la BD. Spring tiene que apuntar a la misma BD que Django (`gastromind_demo`).
 
 **Admin de Django** (`/admin/`): necesita las tablas propias de Django (`auth_*`, `django_*`). Se crean en la BD compartida con `python manage.py migrate` y después `python manage.py createsuperuser`. Las migraciones de `catalogo` **no tocan** las tablas de Spring (todas sus tablas son `managed = False`).
+
+## Formato de errores (HL-014)
+
+Todos los errores de la API salen igual que en Spring Boot (`config/errores.py`):
+
+```json
+{"error": "VALIDACION", "mensaje": "Hay campos con errores.", "campos": {"nombre": "Ya existe un insumo con ese nombre en el restaurante."}}
+```
+
+| `error` | HTTP | Cuándo |
+|---|---|---|
+| `VALIDACION` | 400 | Datos inválidos; `campos` trae un texto por campo |
+| `SOLICITUD_INVALIDA` | 400 | Cuerpo mal formado u otro 400 |
+| `NO_AUTENTICADO` | 401 | Sin token, token inválido o vencido, empleado inactivo |
+| `SIN_PERMISO` | 403 | El rol no puede hacer esa acción |
+| `NO_ENCONTRADO` | 404 | No existe o es de otro restaurante |
+| `METODO_NO_PERMITIDO` | 405 | Método no soportado en esa ruta |
+| `CONFLICTO` | 409 | Choca con el estado actual |
+| `ERROR_INTERNO` | 500 | Error inesperado (sin detalles internos; queda en el log) |
 
 ## Tests
 

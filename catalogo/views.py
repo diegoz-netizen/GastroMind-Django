@@ -1,34 +1,44 @@
-from rest_framework import viewsets, status, filters
+from django.db import IntegrityError, transaction
+from rest_framework import filters, mixins, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.response import Response
+from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
-from .models import Ingrediente, Categoria, Producto, RecetaDetalle
-from .permissions import EsAlmaceneroOAdministrador
-from .serializers import (
-    IngredienteSerializer, 
-    CategoriaSerializer, 
-    ProductoRecetaSerializer, 
-    GuardarRecetaSerializer
-)
+from rest_framework.response import Response
+
+from .models import Categoria, Ingrediente, Producto
+from .permissions import EsAdminOAlmaceneroParaEscribir, EsAdminParaEscribir
+from .serializers import CategoriaSerializer, GuardarRecetaSerializer, IngredienteSerializer, ProductoRecetaSerializer
 
 
-class IngredienteViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated, EsAlmaceneroOAdministrador]
+class IngredienteViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelViewSet):
+    """
+    GET  /api/catalogo/insumos/        lista los insumos del restaurante del token (?search=, ?ordering=)
+    GET  /api/catalogo/insumos/{id}/   un insumo de otro restaurante responde 404 (no se revela que existe)
+    POST /api/catalogo/insumos/        HU-05: registra un insumo (CA-05). Solo ADMINISTRADOR o ALMACENERO.
+    """
+
     serializer_class = IngredienteSerializer
-    filter_backends = [filters.SearchFilter]
+    permission_classes = [IsAuthenticated, EsAdminOAlmaceneroParaEscribir]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['nombre']
-    http_method_names = ['get', 'post', 'head', 'options']
+    ordering_fields = ['nombre', 'stock_actual', 'costo_unitario']
 
     def get_queryset(self):
-        restaurante_id = self.request.user.restaurante_id
-        return Ingrediente.objects.filter(restaurante_id=restaurante_id)
+        # Multi-tenant: SIEMPRE filtrado por el restaurante del empleado autenticado
+        return Ingrediente.objects.filter(restaurante_id=self.request.user.restaurante_id)
 
     def perform_create(self, serializer):
-        serializer.save(restaurante_id=self.request.user.restaurante_id)
+        try:
+            # El restaurante sale del token (de la BD), nunca del body
+            with transaction.atomic():
+                serializer.save(restaurante_id=self.request.user.restaurante_id)
+        except IntegrityError:
+            # Dos altas del mismo nombre a la vez: la segunda choca con el UNIQUE de la tabla
+            raise ValidationError({'nombre': ['Ya existe un insumo con ese nombre en el restaurante.']})
 
 
 class CategoriaViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, EsAdminParaEscribir]
     serializer_class = CategoriaSerializer
 
     def get_queryset(self):
@@ -36,11 +46,12 @@ class CategoriaViewSet(viewsets.ModelViewSet):
         return Categoria.objects.filter(restaurante_id=restaurante_id)
 
     def perform_create(self, serializer):
-        # Asigna el restaurante_id extraído del token al crear la categoría
+        # El restaurante sale del token (de la BD), nunca del body
         serializer.save(restaurante_id=self.request.user.restaurante_id)
 
+
 class ProductoViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, EsAdminParaEscribir]
     serializer_class = ProductoRecetaSerializer
 
     def get_queryset(self):

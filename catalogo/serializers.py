@@ -1,101 +1,61 @@
-from rest_framework import serializers
 from decimal import Decimal
+
 from django.db import transaction
-from .models import Categoria, Producto, RecetaDetalle, Ingrediente
+from rest_framework import serializers
 
-UNIDADES_VALIDAS = {'kg', 'g', 'l', 'ml', 'unidades', 'unidad', 'paquete', 'lata', 'botella', 'caja', 'bolsa'}
+from .models import Categoria, Ingrediente, Producto, RecetaDetalle
+
+# Las de la tabla ingrediente (comentario de unidad_medida en script_database.sql)
+UNIDADES = ['g', 'kg', 'ml', 'l', 'unidades']
+MAYOR_QUE_CERO = 'Debe ser mayor que 0.'
 
 
-# --- HU-05: Insumos / Ingredientes ---
 class IngredienteSerializer(serializers.ModelSerializer):
+    """
+    HU-05. El restaurante no se expone ni se acepta del cliente: sale del token.
+
+    CA-05: nombre, unidad y costo obligatorios; costo y stock mínimo > 0. La BD acepta 0
+    (CHECK >= 0 y DEFAULT 0), pero manda el CA del Excel oficial: se valida aquí, antes de guardar.
+    """
+
+    nombre = serializers.CharField(max_length=150, trim_whitespace=True)
+    unidad_medida = serializers.ChoiceField(choices=UNIDADES)
+    costo_unitario = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=Decimal('0.01'),
+                                              error_messages={'min_value': MAYOR_QUE_CERO})
+    stock_minimo = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=Decimal('0.01'),
+                                            error_messages={'min_value': MAYOR_QUE_CERO})
+    stock_actual = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=Decimal('0'),
+                                            required=False, default=Decimal('0'),
+                                            error_messages={'min_value': 'No puede ser negativo.'})
+    dotacion_cantidad = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=Decimal('0.01'),
+                                                 required=False, allow_null=True,
+                                                 error_messages={'min_value': MAYOR_QUE_CERO})
     bajo_stock_minimo = serializers.BooleanField(read_only=True)
-    stock_minimo = serializers.DecimalField(
-        max_digits=10, 
-        decimal_places=2, 
-        required=True, 
-        allow_null=False
-    )
-    costo_unitario = serializers.DecimalField(
-        max_digits=10, 
-        decimal_places=2, 
-        required=True, 
-        allow_null=False
-    )
 
     class Meta:
         model = Ingrediente
-        fields = [
-            'id', 'nombre', 'unidad_medida', 'stock_actual', 
-            'stock_minimo', 'costo_unitario', 'tipo_control', 
-            'dotacion_cantidad', 'dotacion_periodo', 'bajo_stock_minimo'
-        ]
+        fields = ['id', 'nombre', 'unidad_medida', 'stock_actual', 'stock_minimo', 'costo_unitario',
+                  'tipo_control', 'dotacion_cantidad', 'dotacion_periodo', 'bajo_stock_minimo']
+        # El UNIQUE (restaurante, nombre) se valida a mano en validate_nombre: el restaurante no viene en el body
+        validators = []
 
-    def validate_nombre(self, value):
-        if not value or not value.strip():
-            raise serializers.ValidationError("El nombre del insumo es obligatorio.")
-        return value.strip()
+    def validate_nombre(self, nombre):
+        restaurante_id = self.context['request'].user.restaurante_id
+        if Ingrediente.objects.filter(restaurante_id=restaurante_id, nombre__iexact=nombre).exists():
+            raise serializers.ValidationError('Ya existe un insumo con ese nombre en el restaurante.')
+        return nombre
 
-    def validate_unidad_medida(self, value):
-        if not value:
-            raise serializers.ValidationError("La unidad de medida es obligatoria.")
-        val_clean = value.strip().lower()
-        if val_clean not in UNIDADES_VALIDAS:
-            raise serializers.ValidationError(f"Unidad de medida '{value}' no válida.")
-        return val_clean
-
-    def validate_costo_unitario(self, value):
-        if value is None:
-            raise serializers.ValidationError("El costo unitario es obligatorio.")
-        if value <= Decimal('0'):
-            raise serializers.ValidationError("El costo unitario debe ser mayor a cero.")
-        return value
-
-    def validate_stock_minimo(self, value):
-        if value is None:
-            raise serializers.ValidationError("El stock mínimo es obligatorio.")
-        if value <= Decimal('0'):
-            raise serializers.ValidationError("El stock mínimo debe ser mayor a cero.")
-        return value
-
-    def validate_stock_actual(self, value):
-        if value is not None and value < Decimal('0'):
-            raise serializers.ValidationError("El stock actual no puede ser negativo.")
-        return value
-
-    def validate(self, attrs):
-        tipo_control = attrs.get('tipo_control', 'RECETA')
-        dotacion_cantidad = attrs.get('dotacion_cantidad')
-        dotacion_periodo = attrs.get('dotacion_periodo')
-
-        if tipo_control == 'LIBRE':
-            errors = {}
-            if dotacion_cantidad is None or dotacion_cantidad <= Decimal('0'):
-                errors['dotacion_cantidad'] = 'Para control libre, la dotación es obligatoria y debe ser mayor a cero.'
-            if not dotacion_periodo:
-                errors['dotacion_periodo'] = 'Para control libre, el periodo de dotación es obligatorio.'
-            if errors:
-                raise serializers.ValidationError(errors)
-        elif tipo_control == 'RECETA':
-            attrs['dotacion_cantidad'] = None
-            attrs['dotacion_periodo'] = None
-
-        request = self.context.get('request')
-        if request and hasattr(request, 'user') and hasattr(request.user, 'restaurante_id'):
-            restaurante_id = request.user.restaurante_id
-            nombre = attrs.get('nombre')
-            if nombre:
-                qs = Ingrediente.objects.filter(
-                    restaurante_id=restaurante_id, 
-                    nombre__iexact=nombre
-                )
-                if self.instance:
-                    qs = qs.exclude(pk=self.instance.pk)
-                if qs.exists():
-                    raise serializers.ValidationError({
-                        'nombre': 'Ya existe un insumo con este nombre en tu restaurante.'
-                    })
-
-        return attrs
+    def validate(self, datos):
+        # Igual que el CHECK chk_dotacion_libre: un insumo LIBRE necesita su dotación; uno de RECETA no la usa
+        if datos.get('tipo_control', 'RECETA') == 'LIBRE':
+            faltan = {campo: 'Obligatorio si tipo_control es LIBRE.'
+                      for campo in ('dotacion_cantidad', 'dotacion_periodo') if not datos.get(campo)}
+            if faltan:
+                raise serializers.ValidationError(faltan)
+        else:
+            datos['dotacion_cantidad'] = None
+            datos['dotacion_periodo'] = None
+        return datos
 
 
 # --- HU-06: Categorías y Productos con Receta ---
