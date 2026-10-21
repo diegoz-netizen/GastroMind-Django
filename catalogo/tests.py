@@ -94,6 +94,19 @@ class AutenticacionJWTTest(BaseCatalogoTest):
         self.con_token(token_como_spring(fantasma))
         self.assertEqual(self.client.get(URL).status_code, 401)
 
+    def test_token_anterior_al_cambio_de_contrasena_responde_401(self):
+        # HL-035: Spring sube version_token al restablecer la contraseña
+        Empleado.objects.filter(pk=self.admin_central.pk).update(version_token=1)
+        self.con_token(token_como_spring(self.admin_central, version_token=0))
+        self.assertEqual(self.client.get(URL).status_code, 401)
+        self.con_token(token_como_spring(self.admin_central))  # sin el claim = versión 0
+        self.assertEqual(self.client.get(URL).status_code, 401)
+
+    def test_token_con_la_version_actual_responde_200(self):
+        Empleado.objects.filter(pk=self.admin_central.pk).update(version_token=1)
+        self.con_token(token_como_spring(self.admin_central, version_token=1))
+        self.assertEqual(self.client.get(URL).status_code, 200)
+
     def test_token_sin_usuario_id_responde_401(self):
         token = jwt.encode({'sub': 'x', 'exp': datetime.now(timezone.utc) + timedelta(hours=1)},
                            settings.JWT_SECRET, algorithm='HS256')
@@ -383,6 +396,9 @@ class RecetaPlatilloTest(BaseCatalogoTest):
         self.assertEqual(r.status_code, 400)
         self.assertFalse(RecetaDetalle.objects.exists())
 
+
+
+
     def test_un_error_no_borra_la_receta_anterior(self):
         self.guardar(self.arroz_con_tomate, [{'ingrediente': self.arroz.id, 'cantidad_requerida': '0.200'}])
         self.guardar(self.arroz_con_tomate, [{'ingrediente': self.tomate.id, 'cantidad_requerida': '0'}])
@@ -445,6 +461,8 @@ class CartaPermisosTest(BaseCatalogoTest):
         r = self.client.get('/api/catalogo/categorias/')
         self.assertEqual(r.status_code, 200)
         self.assertEqual([c['nombre'] for c in r.json()], ['Fondos'])
+
+
 
 
 class GestionCartaTest(BaseCatalogoTest):
@@ -578,3 +596,20 @@ class GestionCartaTest(BaseCatalogoTest):
     def test_sin_token_responde_401(self):
         self.client.credentials()
         self.assertEqual(self.desactivar(self.lomo).status_code, 401)
+
+
+class CorsTest(TestCase):
+    """CORS: solo el React de Vite (localhost:5173) puede llamar a la API desde el navegador, igual que Spring."""
+
+    def preflight(self, origen):
+        return self.client.options(URL, HTTP_ORIGIN=origen, HTTP_ACCESS_CONTROL_REQUEST_METHOD='POST',
+                                   HTTP_ACCESS_CONTROL_REQUEST_HEADERS='authorization, content-type')
+
+    def test_el_react_de_vite_esta_permitido(self):
+        respuesta = self.preflight('http://localhost:5173')
+        self.assertEqual(respuesta['Access-Control-Allow-Origin'], 'http://localhost:5173')
+
+    def test_otros_origenes_no_reciben_permiso(self):
+        for origen in ('http://localhost:5174', 'http://localhost:3000', 'https://pagina-cualquiera.com'):
+            with self.subTest(origen=origen):
+                self.assertNotIn('Access-Control-Allow-Origin', self.preflight(origen))

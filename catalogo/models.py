@@ -56,6 +56,8 @@ class Empleado(models.Model):
     pin_acceso = models.CharField(max_length=255, null=True, blank=True)
     estado = models.CharField(max_length=20)
     fecha_registro = models.DateTimeField()
+    # HL-035: va en el JWT; Spring la sube al cambiar la contraseña y los tokens anteriores dejan de valer
+    version_token = models.IntegerField(default=0)
 
     class Meta:
         managed = False
