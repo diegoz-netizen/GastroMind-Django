@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "GastroMind — Django (catálogo)",
-    "description": "Demo de la base de Django: login en Spring (JWT) → API de insumos en Django.\n\nOrden: ejecutar primero \"1. Login\" (guarda el token solo) y después las carpetas 2 a 4 en orden.\nRequisitos: Spring en :8080 y Django en :8000, ambos sobre la BD gastromind_demo (docs/seed_demo.sql del repo GastroMind-SpringBoot).",
+    "description": "Demo de la base de Django: login en Spring (JWT) → API de insumos en Django.\n\nOrden: ejecutar primero \"1. Login\" (guarda el token solo) y después las carpetas 2 a 5 en orden.\nRequisitos: Spring en :8080 y Django en :8000, ambos sobre la BD gastromind_demo (docs/seed_demo.sql del repo GastroMind-SpringBoot).",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -36,6 +36,22 @@
     },
     {
       "key": "pescadoId",
+      "value": ""
+    },
+    {
+      "key": "fondosId",
+      "value": ""
+    },
+    {
+      "key": "limonadaNorteId",
+      "value": ""
+    },
+    {
+      "key": "platilloNuevo",
+      "value": ""
+    },
+    {
+      "key": "platilloId",
       "value": ""
     }
   ],
@@ -509,6 +525,307 @@
               "raw": "{\"nombre\": \"X\", \"unidad_medida\": \"kg\", \"costo_unitario\": \"1\", \"stock_minimo\": \"1\"}"
             },
             "url": "{{django}}/api/catalogo/insumos/"
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Gestionar la carta (Django, HU-07)",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{token}}",
+            "type": "string"
+          }
+        ]
+      },
+      "item": [
+        {
+          "name": "Categorías (Central): guarda Fondos",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const fondos = pm.response.json().find(c => c.nombre === 'Fondos');",
+                  "pm.test('Existe la categoría Fondos (seed_demo.sql)', () => pm.expect(fondos).to.exist);",
+                  "pm.collectionVariables.set('fondosId', fondos.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{django}}/api/catalogo/categorias/"
+          }
+        },
+        {
+          "name": "Carta (Norte): guarda la Limonada",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const limonada = pm.response.json().find(p => p.nombre === 'Limonada');",
+                  "pm.test('La Sede Norte tiene Limonada (seed_demo.sql)', () => pm.expect(limonada).to.exist);",
+                  "pm.collectionVariables.set('limonadaNorteId', limonada.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{django}}/api/catalogo/productos/",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenNorte}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Crear platillo → 201 (nace ACTIVO)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.collectionVariables.set('platilloNuevo', 'Platillo Postman ' + Date.now());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "const r = pm.response.json();",
+                  "pm.test('Nace ACTIVO aunque el body diga INACTIVO', () => pm.expect(r.estado).to.eql('ACTIVO'));",
+                  "pm.collectionVariables.set('platilloId', r.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{django}}/api/catalogo/productos/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"{{platilloNuevo}}\",\n  \"precio\": \"24.50\",\n  \"categoria\": {{fondosId}},\n  \"estado\": \"INACTIVO\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Precio 0 → 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('400', () => pm.response.to.have.status(400));",
+                  "pm.test('Mensaje en el campo precio', () => pm.expect(pm.response.json().campos.precio).to.eql('Debe ser mayor que 0.'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{django}}/api/catalogo/productos/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Gratis\",\n  \"precio\": \"0\",\n  \"categoria\": {{fondosId}}\n}"
+            }
+          }
+        },
+        {
+          "name": "Editar precio → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Precio nuevo', () => pm.expect(pm.response.json().precio).to.eql('26.00'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{django}}/api/catalogo/productos/{{platilloId}}/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"precio\": \"26.00\"\n}"
+            }
+          }
+        },
+        {
+          "name": "CA-07: desactivar → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Queda INACTIVO', () => pm.expect(pm.response.json().estado).to.eql('INACTIVO'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{django}}/api/catalogo/productos/{{platilloId}}/estado/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"estado\": \"INACTIVO\"\n}"
+            }
+          }
+        },
+        {
+          "name": "CA-07: carta para pedidos (?estado=ACTIVO) ya no lo trae",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const ids = pm.response.json().map(p => p.id);",
+                  "pm.test('No aparece el desactivado', () => pm.expect(ids).to.not.include(pm.collectionVariables.get('platilloId')));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{django}}/api/catalogo/productos/?estado=ACTIVO"
+          }
+        },
+        {
+          "name": "CA-07: el desactivado se conserva (detalle → 200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Sigue en la BD como INACTIVO', () => pm.expect(pm.response.json().estado).to.eql('INACTIVO'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{django}}/api/catalogo/productos/{{platilloId}}/"
+          }
+        },
+        {
+          "name": "Borrar → 405 (no hay borrado físico)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('405', () => pm.response.to.have.status(405));",
+                  "pm.test('Formato HL-014', () => pm.expect(pm.response.json().error).to.eql('METODO_NO_PERMITIDO'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{django}}/api/catalogo/productos/{{platilloId}}/"
+          }
+        },
+        {
+          "name": "Reactivar → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Vuelve a ACTIVO', () => pm.expect(pm.response.json().estado).to.eql('ACTIVO'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{django}}/api/catalogo/productos/{{platilloId}}/estado/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"estado\": \"ACTIVO\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Desactivar platillo de OTRO restaurante → 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{django}}/api/catalogo/productos/{{limonadaNorteId}}/estado/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"estado\": \"INACTIVO\"\n}"
+            }
           }
         }
       ]
