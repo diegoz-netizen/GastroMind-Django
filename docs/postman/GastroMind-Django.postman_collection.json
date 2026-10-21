@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "GastroMind — Django (catálogo)",
-    "description": "Demo de la base de Django: login en Spring (JWT) → API de insumos en Django.\n\nOrden: ejecutar primero \"1. Login\" (guarda el token solo) y después las carpetas 2 a 5 en orden.\nRequisitos: Spring en :8080 y Django en :8000, ambos sobre la BD gastromind_demo (docs/seed_demo.sql del repo GastroMind-SpringBoot).",
+    "description": "Demo de la base de Django: login en Spring (JWT) → API de insumos en Django.\n\nOrden: ejecutar primero \"1. Login\" (guarda el token solo) y después las carpetas 2 a 6 en orden.\nRequisitos: Spring en :8080 y Django en :8000, ambos sobre la BD gastromind_demo (docs/seed_demo.sql del repo GastroMind-SpringBoot).",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -52,6 +52,14 @@
     },
     {
       "key": "platilloId",
+      "value": ""
+    },
+    {
+      "key": "arrozId",
+      "value": ""
+    },
+    {
+      "key": "arrozCosto",
       "value": ""
     }
   ],
@@ -829,6 +837,127 @@
           }
         }
       ]
+    },
+    {
+      "name": "6. Costo del platillo (Django, HU-08)",
+      "item": [
+        {
+          "name": "CA-08: carta con el costo de cada platillo (seed)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const carta = pm.response.json();",
+                  "const p = nombre => carta.find(x => x.nombre === nombre);",
+                  "pm.test('Cada platillo trae costo, margen y porcentaje_costo', () => carta.forEach(x => pm.expect(x).to.include.keys('costo', 'margen', 'porcentaje_costo')));",
+                  "pm.test('Arroz con pollo: costo S/ 4.35 (Σ cantidad × costo de sus 5 insumos)', () => pm.expect(p('Arroz con pollo').costo).to.eql('4.35'));",
+                  "pm.test('Lomo saltado: costo 9.87, margen 22.13, 30.8 % del precio', () => { const l = p('Lomo saltado'); pm.expect([l.costo, l.margen, l.porcentaje_costo]).to.eql(['9.87', '22.13', '30.8']); });",
+                  "pm.test('Chicha morada (sin receta): costo 0.00', () => pm.expect(p('Chicha morada (jarra)').costo).to.eql('0.00'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{django}}/api/catalogo/productos/"
+          }
+        },
+        {
+          "name": "Insumo Arroz (guarda su id)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const arroz = pm.response.json().find(i => i.nombre === 'Arroz');",
+                  "pm.test('Existe el Arroz (seed_demo.sql)', () => pm.expect(arroz).to.exist);",
+                  "pm.collectionVariables.set('arrozId', arroz.id);",
+                  "pm.collectionVariables.set('arrozCosto', arroz.costo_unitario);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{django}}/api/catalogo/insumos/?search=Arroz"
+          }
+        },
+        {
+          "name": "CA-08: receta del platillo nuevo → el costo se calcula",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "const esperado = (0.2 * Number(pm.collectionVariables.get('arrozCosto'))).toFixed(2);",
+                  "pm.test('costo = 0.200 × costo del Arroz', () => pm.expect(r.costo).to.eql(esperado));",
+                  "pm.test('margen = precio − costo', () => pm.expect(Number(r.margen)).to.be.closeTo(Number(r.precio) - Number(r.costo), 0.001));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{django}}/api/catalogo/productos/{{platilloId}}/receta/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"detalles\": [{\"ingrediente\": {{arrozId}}, \"cantidad_requerida\": \"0.200\"}]\n}"
+            }
+          }
+        },
+        {
+          "name": "CA-08: al cambiar la receta cambia el costo",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const esperado = (0.4 * Number(pm.collectionVariables.get('arrozCosto'))).toFixed(2);",
+                  "pm.test('El doble de arroz → el doble de costo', () => pm.expect(pm.response.json().costo).to.eql(esperado));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{django}}/api/catalogo/productos/{{platilloId}}/receta/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"detalles\": [{\"ingrediente\": {{arrozId}}, \"cantidad_requerida\": \"0.400\"}]\n}"
+            }
+          }
+        }
+      ],
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{token}}",
+            "type": "string"
+          }
+        ]
+      }
     }
   ]
 }

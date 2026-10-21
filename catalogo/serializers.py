@@ -1,4 +1,4 @@
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
 from django.db import transaction
 from rest_framework import serializers
@@ -58,6 +58,14 @@ class IngredienteSerializer(serializers.ModelSerializer):
         return datos
 
 
+def costo_de(producto):
+    """HU-08 / CA-08: costo de insumos = Σ (cantidad de la receta × costo unitario del insumo), a 2 decimales.
+    Un platillo sin receta cuesta 0. Se redondea una sola vez, al final."""
+    total = sum((linea.cantidad_requerida * linea.ingrediente.costo_unitario
+                 for linea in producto.detalles_receta.all()), Decimal('0'))
+    return total.quantize(Decimal('0.01'), ROUND_HALF_UP)
+
+
 # --- HU-06: Categorías y Productos con Receta ---
 class CategoriaSerializer(serializers.ModelSerializer):
     class Meta:
@@ -107,11 +115,28 @@ class ProductoRecetaSerializer(serializers.ModelSerializer):
                                       error_messages={'min_value': MAYOR_QUE_CERO})
     categoria_nombre = serializers.ReadOnlyField(source='categoria.nombre')
     detalles_receta = RecetaDetalleReadSerializer(many=True, read_only=True)
+    # HU-08 (CA-08): se calculan al vuelo con la receta y el costo actual de cada insumo; no se guardan
+    costo = serializers.SerializerMethodField()
+    margen = serializers.SerializerMethodField()
+    porcentaje_costo = serializers.SerializerMethodField()
 
     class Meta:
         model = Producto
-        fields = ['id', 'nombre', 'precio', 'categoria', 'categoria_nombre', 'requiere_receta', 'estado', 'detalles_receta']
+        fields = ['id', 'nombre', 'precio', 'categoria', 'categoria_nombre', 'requiere_receta', 'estado', 'detalles_receta',
+                  'costo', 'margen', 'porcentaje_costo']
         read_only_fields = ['estado']
+
+    def get_costo(self, producto):
+        return str(costo_de(producto))
+
+    def get_margen(self, producto):
+        return str(producto.precio - costo_de(producto))
+
+    def get_porcentaje_costo(self, producto):
+        # Qué parte del precio se va en insumos (food cost)
+        if not producto.precio:
+            return None
+        return str((costo_de(producto) / producto.precio * 100).quantize(Decimal('0.1'), ROUND_HALF_UP))
 
     def validate_categoria(self, value):
         # Valida que la categoría seleccionada pertenezca al restaurante del usuario autenticado
