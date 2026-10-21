@@ -1,7 +1,7 @@
 from django.db import IntegrityError, transaction
 from rest_framework import filters, mixins, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import APIException, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
@@ -9,6 +9,14 @@ from .models import Categoria, Ingrediente, Producto
 from .permissions import EsAdminOAlmaceneroParaEscribir, EsAdminParaEscribir
 from .serializers import (CategoriaSerializer, EstadoProductoSerializer, GuardarRecetaSerializer, IngredienteSerializer,
                           ProductoRecetaSerializer)
+
+
+class Conflicto(APIException):
+    """409 CONFLICTO (HL-014): la acción choca con datos que dependen del recurso."""
+
+    status_code = status.HTTP_409_CONFLICT
+    default_detail = 'El recurso tiene datos que dependen de él.'
+    default_code = 'conflicto'
 
 
 class IngredienteViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelViewSet):
@@ -39,6 +47,11 @@ class IngredienteViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelViewSet)
 
 
 class CategoriaViewSet(viewsets.ModelViewSet):
+    """
+    DELETE /api/catalogo/categorias/{id}/   solo si no tiene platillos (409): borrarla se llevaría
+    sus platillos y recetas (CA-07: un platillo se desactiva, nunca se borra).
+    """
+
     permission_classes = [IsAuthenticated, EsAdminParaEscribir]
     serializer_class = CategoriaSerializer
 
@@ -49,6 +62,11 @@ class CategoriaViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         # El restaurante sale del token (de la BD), nunca del body
         serializer.save(restaurante_id=self.request.user.restaurante_id)
+
+    def perform_destroy(self, instance):
+        if instance.productos.exists():
+            raise Conflicto('La categoría tiene platillos: muévelos a otra categoría o desactívalos antes de borrarla.')
+        instance.delete()
 
 
 class ProductoViewSet(viewsets.ModelViewSet):
@@ -98,8 +116,8 @@ class ProductoViewSet(viewsets.ModelViewSet):
                 data=request.data, 
                 context={'producto': producto, 'request': request}
             )
-            if serializer.is_valid():
-                serializer.save()
-                res_serializer = ProductoRecetaSerializer(producto)
-                return Response(res_serializer.data, status=status.HTTP_200_OK)
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            # HL-014: los errores pasan por config/errores.py como el resto de la API
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+            res_serializer = ProductoRecetaSerializer(producto)
+            return Response(res_serializer.data, status=status.HTTP_200_OK)

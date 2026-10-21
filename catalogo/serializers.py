@@ -81,6 +81,14 @@ class RecetaDetalleWriteSerializer(serializers.ModelSerializer):
         model = RecetaDetalle
         fields = ['ingrediente', 'cantidad_requerida']
 
+    def get_fields(self):
+        # Solo los insumos del restaurante del token: uno de otra sede responde igual que uno inexistente
+        fields = super().get_fields()
+        request = self.context.get('request')
+        if request is not None:
+            fields['ingrediente'].queryset = Ingrediente.objects.filter(restaurante_id=request.user.restaurante_id)
+        return fields
+
     def validate_cantidad_requerida(self, value):
         if value is None or value <= 0:
             raise serializers.ValidationError("La cantidad requerida debe ser mayor a cero.")
@@ -131,17 +139,12 @@ class GuardarRecetaSerializer(serializers.Serializer):
         if len(ingredientes_ids) != len(set(ingredientes_ids)):
             raise serializers.ValidationError("No se pueden repetir insumos en la misma receta.")
 
-        request = self.context.get('request')
-        if request and hasattr(request, 'user') and hasattr(request.user, 'restaurante_id'):
-            restaurante_id = request.user.restaurante_id
-            for item in value:
-                ingrediente = item['ingrediente']
-                if ingrediente.restaurante_id != restaurante_id:
-                    raise serializers.ValidationError(
-                        f"El insumo '{ingrediente.nombre}' no pertenece a tu restaurante."
-                    )
-
         return value
+
+    def validate(self, attrs):
+        if not self.context['producto'].requiere_receta:
+            raise serializers.ValidationError("Este platillo no requiere receta.")
+        return attrs
 
     def create(self, validated_data):
         producto = self.context['producto']

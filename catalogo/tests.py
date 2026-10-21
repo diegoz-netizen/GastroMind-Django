@@ -348,6 +348,8 @@ class RecetaPlatilloTest(BaseCatalogoTest):
         cls.bebidas_norte = Categoria.objects.create(restaurante=cls.norte, nombre='Bebidas')
         cls.limonada_norte = Producto.objects.create(categoria=cls.bebidas_norte, nombre='Limonada',
                                                      precio=Decimal('6.00'))
+        cls.chicha = Producto.objects.create(categoria=cls.fondos, nombre='Chicha morada', precio=Decimal('6.00'),
+                                             requiere_receta=False)
 
     def url_receta(self, producto):
         return f'/api/catalogo/productos/{producto.id}/receta/'
@@ -396,8 +398,24 @@ class RecetaPlatilloTest(BaseCatalogoTest):
         self.assertEqual(r.status_code, 400)
         self.assertFalse(RecetaDetalle.objects.exists())
 
+    def test_insumo_de_otro_restaurante_responde_igual_que_uno_inexistente(self):
+        ajeno = self.guardar(self.arroz_con_tomate, [{'ingrediente': self.pollo_norte.id, 'cantidad_requerida': '1'}])
+        inexistente = self.guardar(self.arroz_con_tomate, [{'ingrediente': 999999, 'cantidad_requerida': '1'}])
+        self.assertNotIn('Pollo', ajeno.content.decode())
+        self.assertEqual(ajeno.json()['campos']['detalles'].replace(str(self.pollo_norte.id), 'ID'),
+                         inexistente.json()['campos']['detalles'].replace('999999', 'ID'))
 
+    def test_error_de_validacion_usa_el_formato_hl014(self):
+        r = self.guardar(self.arroz_con_tomate, [{'ingrediente': self.arroz.id, 'cantidad_requerida': '0'}])
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()['error'], 'VALIDACION')
+        self.assertIn('detalles', r.json()['campos'])
 
+    def test_platillo_que_no_requiere_receta_responde_400(self):
+        r = self.guardar(self.chicha, [{'ingrediente': self.arroz.id, 'cantidad_requerida': '0.100'}])
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()['mensaje'], 'Este platillo no requiere receta.')
+        self.assertFalse(RecetaDetalle.objects.filter(producto=self.chicha).exists())
 
     def test_un_error_no_borra_la_receta_anterior(self):
         self.guardar(self.arroz_con_tomate, [{'ingrediente': self.arroz.id, 'cantidad_requerida': '0.200'}])
@@ -462,7 +480,21 @@ class CartaPermisosTest(BaseCatalogoTest):
         self.assertEqual(r.status_code, 200)
         self.assertEqual([c['nombre'] for c in r.json()], ['Fondos'])
 
+    def test_borrar_categoria_con_platillos_responde_409_y_no_borra_nada(self):
+        lomo = Producto.objects.create(categoria=self.fondos, nombre='Lomo saltado', precio=Decimal('25.00'))
+        RecetaDetalle.objects.create(producto=lomo, ingrediente=self.arroz, cantidad_requerida=Decimal('0.200'))
+        self.con_token(token_como_spring(self.admin_central))
+        r = self.client.delete(f'/api/catalogo/categorias/{self.fondos.id}/')
+        self.assertEqual(r.status_code, 409)
+        self.assertEqual(r.json()['error'], 'CONFLICTO')
+        self.assertTrue(Categoria.objects.filter(id=self.fondos.id).exists())
+        self.assertTrue(RecetaDetalle.objects.filter(producto=lomo).exists())
 
+    def test_borrar_categoria_vacia_responde_204(self):
+        vacia = Categoria.objects.create(restaurante=self.central, nombre='Postres')
+        self.con_token(token_como_spring(self.admin_central))
+        self.assertEqual(self.client.delete(f'/api/catalogo/categorias/{vacia.id}/').status_code, 204)
+        self.assertFalse(Categoria.objects.filter(id=vacia.id).exists())
 
 
 class GestionCartaTest(BaseCatalogoTest):
