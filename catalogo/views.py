@@ -77,6 +77,7 @@ class ProductoViewSet(viewsets.ModelViewSet):
     PUT/PATCH /api/catalogo/productos/{id}/      edita nombre, precio, categoría o requiere_receta
     PATCH /api/catalogo/productos/{id}/estado/   activa o desactiva (CA-07)
     DELETE no existe (405): un platillo desactivado se conserva en el historial de ventas.
+    HU-08: cada platillo trae costo, margen y porcentaje_costo, calculados con su receta (CA-08).
     """
 
     permission_classes = [IsAuthenticated, EsAdminParaEscribir]
@@ -85,8 +86,10 @@ class ProductoViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         restaurante_id = self.request.user.restaurante_id
+        # La receta con sus insumos se trae en una sola consulta: el costo (HU-08) se calcula con ella
         productos = (Producto.objects.filter(categoria__restaurante_id=restaurante_id)
-                     .select_related('categoria').order_by('categoria__nombre', 'nombre'))
+                     .select_related('categoria').prefetch_related('detalles_receta__ingrediente')
+                     .order_by('categoria__nombre', 'nombre'))
         estado = self.request.query_params.get('estado')
         if estado is not None and self.action == 'list':
             if estado not in Producto.ESTADOS:
@@ -119,5 +122,7 @@ class ProductoViewSet(viewsets.ModelViewSet):
             # HL-014: los errores pasan por config/errores.py como el resto de la API
             serializer.is_valid(raise_exception=True)
             serializer.save()
+            # Se vuelve a leer: el producto trae la receta anterior ya cargada (prefetch) y el costo saldría viejo
+            producto = self.get_queryset().get(pk=producto.pk)
             res_serializer = ProductoRecetaSerializer(producto)
             return Response(res_serializer.data, status=status.HTTP_200_OK)

@@ -630,6 +630,81 @@ class GestionCartaTest(BaseCatalogoTest):
         self.assertEqual(self.desactivar(self.lomo).status_code, 401)
 
 
+class CostoPlatilloTest(BaseCatalogoTest):
+    """HU-08 / CA-08: costo = Σ(cantidad × costo unitario) y se actualiza al cambiar la receta o el costo del insumo."""
+
+    URL = '/api/catalogo/productos/'
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        fondos = Categoria.objects.create(restaurante=cls.central, nombre='Fondos')
+        bebidas = Categoria.objects.create(restaurante=cls.central, nombre='Bebidas')
+
+        def insumo(nombre, costo):
+            return Ingrediente.objects.create(restaurante=cls.central, nombre=nombre, unidad_medida='kg',
+                                              stock_actual=Decimal('10'), stock_minimo=Decimal('1'),
+                                              costo_unitario=Decimal(costo))
+
+        cls.lomo_res = insumo('Lomo de res', '38.00')
+        cls.papa = insumo('Papa amarilla', '2.80')
+        cls.lomo = Producto.objects.create(categoria=fondos, nombre='Lomo saltado', precio=Decimal('32.00'))
+        RecetaDetalle.objects.create(producto=cls.lomo, ingrediente=cls.lomo_res, cantidad_requerida=Decimal('0.200'))
+        RecetaDetalle.objects.create(producto=cls.lomo, ingrediente=cls.papa, cantidad_requerida=Decimal('0.250'))
+        cls.chicha = Producto.objects.create(categoria=bebidas, nombre='Chicha morada', precio=Decimal('12.00'),
+                                             requiere_receta=False)
+
+    def setUp(self):
+        super().setUp()
+        self.con_token(token_como_spring(self.admin_central))
+
+    def detalle(self, producto):
+        return self.client.get(f'{self.URL}{producto.id}/').json()
+
+    def test_costo_es_la_suma_de_cantidad_por_costo_unitario(self):
+        # 0.200 × 38.00 + 0.250 × 2.80 = 7.60 + 0.70
+        platillo = self.detalle(self.lomo)
+        self.assertEqual(platillo['costo'], '8.30')
+        self.assertEqual(platillo['margen'], '23.70')
+        self.assertEqual(platillo['porcentaje_costo'], '25.9')
+
+    def test_la_lista_trae_el_costo_de_cada_platillo(self):
+        costos = {p['nombre']: p['costo'] for p in self.client.get(self.URL).json()}
+        self.assertEqual(costos, {'Lomo saltado': '8.30', 'Chicha morada': '0.00'})
+
+    def test_platillo_sin_receta_cuesta_cero_y_su_margen_es_el_precio(self):
+        platillo = self.detalle(self.chicha)
+        self.assertEqual((platillo['costo'], platillo['margen'], platillo['porcentaje_costo']), ('0.00', '12.00', '0.0'))
+
+    def test_al_cambiar_la_receta_cambia_el_costo(self):
+        r = self.client.post(f'{self.URL}{self.lomo.id}/receta/',
+                             {'detalles': [{'ingrediente': self.lomo_res.id, 'cantidad_requerida': '0.250'}]},
+                             format='json')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()['costo'], '9.50')  # la respuesta ya trae el costo nuevo
+        self.assertEqual(self.detalle(self.lomo)['costo'], '9.50')
+
+    def test_al_cambiar_el_costo_del_insumo_cambia_el_costo_del_platillo(self):
+        Ingrediente.objects.filter(pk=self.lomo_res.pk).update(costo_unitario=Decimal('40.00'))
+        self.assertEqual(self.detalle(self.lomo)['costo'], '8.70')  # 8.00 + 0.70
+
+    def test_se_redondea_una_sola_vez_al_final(self):
+        # 0.005 × 1.00 dos veces = 0.010 → 0.01 (redondeando cada línea saldría 0.02)
+        a, b = self.lomo_res, self.papa
+        Ingrediente.objects.filter(pk__in=[a.pk, b.pk]).update(costo_unitario=Decimal('1.00'))
+        RecetaDetalle.objects.filter(producto=self.lomo).update(cantidad_requerida=Decimal('0.005'))
+        self.assertEqual(self.detalle(self.lomo)['costo'], '0.01')
+
+    def test_el_costo_no_se_puede_escribir(self):
+        r = self.client.patch(f'{self.URL}{self.lomo.id}/', {'costo': '1.00', 'margen': '31.00'}, format='json')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()['costo'], '8.30')
+
+    def test_el_cocinero_tambien_ve_el_costo(self):
+        self.con_token(token_como_spring(self.cocinero_central))
+        self.assertEqual(self.detalle(self.lomo)['costo'], '8.30')
+
+
 class CorsTest(TestCase):
     """CORS: solo el React de Vite (localhost:5173) puede llamar a la API desde el navegador, igual que Spring."""
 
