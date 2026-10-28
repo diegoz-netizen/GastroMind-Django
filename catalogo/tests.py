@@ -225,20 +225,26 @@ class RegistrarInsumoTest(BaseCatalogoTest):
             with self.subTest(minimo=minimo):
                 self.assertError400(self.registrar(stock_minimo=minimo), 'stock_minimo')
 
-    def test_stock_actual_negativo_responde_400(self):
-        self.assertError400(self.registrar(stock_actual='-1'), 'stock_actual')
+    def test_el_stock_inicial_siempre_es_cero(self):
+        # PO (28/10): el stock entra solo con las compras (HU-14), que dejan su movimiento en el kardex
+        respuesta = self.registrar(stock_actual='5')
+        self.assertEqual(respuesta.status_code, 201, respuesta.content)
+        self.assertEqual(respuesta.json()['stock_actual'], '0.000')
+        self.assertEqual(Ingrediente.objects.get(id=respuesta.json()['id']).stock_actual, Decimal('0'))
 
     # --- stock con 3 decimales (migración 005) ---
 
     def test_stock_con_tres_decimales_no_se_redondea(self):
-        respuesta = self.registrar(stock_actual='1.995', stock_minimo='0.005')
+        respuesta = self.registrar(stock_minimo='0.005')
         self.assertEqual(respuesta.status_code, 201, respuesta.content)
-        self.assertEqual((respuesta.json()['stock_actual'], respuesta.json()['stock_minimo']), ('1.995', '0.005'))
-        insumo = Ingrediente.objects.get(id=respuesta.json()['id'])
-        self.assertEqual((insumo.stock_actual, insumo.stock_minimo), (Decimal('1.995'), Decimal('0.005')))
+        self.assertEqual(respuesta.json()['stock_minimo'], '0.005')
+        # El stock lo mueve Spring; la API lo devuelve con sus 3 decimales
+        Ingrediente.objects.filter(id=respuesta.json()['id']).update(stock_actual=Decimal('1.995'))
+        insumo = next(i for i in self.client.get(URL).json() if i['id'] == respuesta.json()['id'])
+        self.assertEqual(insumo['stock_actual'], '1.995')
 
     def test_stock_con_mas_de_tres_decimales_responde_400(self):
-        self.assertError400(self.registrar(stock_actual='1.0005'), 'stock_actual')
+        self.assertError400(self.registrar(stock_minimo='1.0005'), 'stock_minimo')
 
     def test_no_guarda_nada_si_hay_error(self):
         antes = Ingrediente.objects.count()
