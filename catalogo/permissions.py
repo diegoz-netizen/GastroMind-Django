@@ -28,3 +28,15 @@ class EsAdminParaEscribir(BasePermission):
         if request.method in SAFE_METHODS:
             return True
         return request.user.rol.upper() == 'ADMINISTRADOR'
+
+
+class EsAdminOAlmacenero(BasePermission):
+    """
+    HU-16 ("se avisa a todo el personal con el rol requerido"): las alertas de stock y vencimiento
+    las ven solo ADMINISTRADOR o ALMACENERO, también para leer; el resto recibe 403.
+    """
+
+    message = 'Se requiere rol ADMINISTRADOR o ALMACENERO.'
+
+    def has_permission(self, request, view):
+        return request.user.rol.upper() in EsAdminOAlmaceneroParaEscribir.ROLES_ESCRITURA
