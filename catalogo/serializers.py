@@ -126,15 +126,33 @@ class ProductoRecetaSerializer(serializers.ModelSerializer):
                   'costo', 'margen', 'porcentaje_costo']
         read_only_fields = ['estado']
 
+    # Review 2: el costo es dato del negocio; los demás roles ven la carta y la receta sin él
+    CAMPOS_DE_COSTO = ('costo', 'margen', 'porcentaje_costo')
+
+    def to_representation(self, producto):
+        datos = super().to_representation(producto)
+        request = self.context.get('request')
+        if request is None or getattr(request.user, 'rol', '').upper() != 'ADMINISTRADOR':
+            for campo in self.CAMPOS_DE_COSTO:
+                datos.pop(campo, None)
+            for linea in datos['detalles_receta']:
+                linea.pop('costo_unitario', None)
+        return datos
+
+    @staticmethod
+    def tiene_costo(producto):
+        # Review 2: lo que no lleva receta (o aún no la tiene) sale sin costo, no con 0.00 y 100 % de margen
+        return producto.requiere_receta and len(producto.detalles_receta.all()) > 0
+
     def get_costo(self, producto):
-        return str(costo_de(producto))
+        return str(costo_de(producto)) if self.tiene_costo(producto) else None
 
     def get_margen(self, producto):
-        return str(producto.precio - costo_de(producto))
+        return str(producto.precio - costo_de(producto)) if self.tiene_costo(producto) else None
 
     def get_porcentaje_costo(self, producto):
         # Qué parte del precio se va en insumos (food cost)
-        if not producto.precio:
+        if not producto.precio or not self.tiene_costo(producto):
             return None
         return str((costo_de(producto) / producto.precio * 100).quantize(Decimal('0.1'), ROUND_HALF_UP))
 

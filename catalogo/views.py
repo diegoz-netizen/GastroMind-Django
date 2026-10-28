@@ -78,6 +78,7 @@ class ProductoViewSet(viewsets.ModelViewSet):
     PATCH /api/catalogo/productos/{id}/estado/   activa o desactiva (CA-07)
     DELETE no existe (405): un platillo desactivado se conserva en el historial de ventas.
     HU-08: cada platillo trae costo, margen y porcentaje_costo, calculados con su receta (CA-08).
+    Solo los ve el ADMINISTRADOR, y salen en null si el platillo no lleva receta o aún no la tiene (Review 2).
     """
 
     permission_classes = [IsAuthenticated, EsAdminParaEscribir]
@@ -104,14 +105,14 @@ class ProductoViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         producto.estado = serializer.validated_data['estado']
         producto.save(update_fields=['estado'])
-        return Response(ProductoRecetaSerializer(producto).data)
+        return Response(self.get_serializer(producto).data)
 
     @action(detail=True, methods=['post', 'get'], url_path='receta')
     def receta(self, request, pk=None):
         producto = self.get_object()
 
         if request.method == 'GET':
-            serializer = ProductoRecetaSerializer(producto)
+            serializer = self.get_serializer(producto)
             return Response(serializer.data)
 
         if request.method == 'POST':
@@ -124,5 +125,5 @@ class ProductoViewSet(viewsets.ModelViewSet):
             serializer.save()
             # Se vuelve a leer: el producto trae la receta anterior ya cargada (prefetch) y el costo saldría viejo
             producto = self.get_queryset().get(pk=producto.pk)
-            res_serializer = ProductoRecetaSerializer(producto)
+            res_serializer = self.get_serializer(producto)
             return Response(res_serializer.data, status=status.HTTP_200_OK)
