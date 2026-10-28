@@ -277,6 +277,35 @@ class RegistrarInsumoTest(BaseCatalogoTest):
         self.client.credentials()
         self.assertEqual(self.registrar().status_code, 401)
 
+    # --- quién ve el costo (Review 2) ---
+
+    def insumos_como(self, empleado, query=''):
+        self.con_token(token_como_spring(empleado))
+        return self.client.get(URL + query).json()
+
+    def test_admin_y_almacenero_ven_el_costo_del_insumo(self):
+        self.registrar()
+        for empleado in (self.admin_central, self.almacenero_central):
+            sal = next(i for i in self.insumos_como(empleado) if i['nombre'] == 'Sal')
+            self.assertEqual(sal['costo_unitario'], '1.50')
+
+    def test_cocinero_ve_los_insumos_sin_su_costo(self):
+        self.registrar()
+        insumos = self.insumos_como(self.cocinero_central)
+        self.assertIn('Sal', [i['nombre'] for i in insumos])
+        for insumo in insumos:
+            self.assertNotIn('costo_unitario', insumo)
+
+    def test_cocinero_no_puede_ordenar_por_costo(self):
+        # Sal es el más barato y Azúcar el más caro: por costo no coinciden con el orden por nombre
+        self.registrar(costo_unitario='0.01')
+        self.registrar(nombre='Azúcar', costo_unitario='999.00')
+        orden = '?ordering=costo_unitario,nombre'
+        del_admin = [i['nombre'] for i in self.insumos_como(self.admin_central, orden)]
+        self.assertEqual((del_admin[0], del_admin[-1]), ('Sal', 'Azúcar'))
+        del_cocinero = [i['nombre'] for i in self.insumos_como(self.cocinero_central, orden)]
+        self.assertEqual(del_cocinero, sorted(del_admin))  # el costo se ignora: queda solo por nombre
+
 
 class FormatoErroresTest(BaseCatalogoTest):
     """HL-014: los errores salen como {error, mensaje, campos?}, con los mismos códigos que Spring."""

@@ -8,6 +8,13 @@ from .models import Categoria, Ingrediente, Producto, RecetaDetalle
 # Las de la tabla ingrediente (comentario de unidad_medida en script_database.sql)
 UNIDADES = ['g', 'kg', 'ml', 'l', 'unidades']
 MAYOR_QUE_CERO = 'Debe ser mayor que 0.'
+# Review 2: el costo de un insumo solo lo ven quienes compran o costean (HU-05 y HU-14)
+ROLES_QUE_VEN_COSTO_INSUMO = {'ADMINISTRADOR', 'ALMACENERO'}
+
+
+def rol_de(context):
+    request = context.get('request')
+    return getattr(getattr(request, 'user', None), 'rol', '').upper()
 
 
 class IngredienteSerializer(serializers.ModelSerializer):
@@ -38,6 +45,12 @@ class IngredienteSerializer(serializers.ModelSerializer):
                   'tipo_control', 'dotacion_cantidad', 'dotacion_periodo', 'bajo_stock_minimo']
         # El UNIQUE (restaurante, nombre) se valida a mano en validate_nombre: el restaurante no viene en el body
         validators = []
+
+    def to_representation(self, insumo):
+        datos = super().to_representation(insumo)
+        if rol_de(self.context) not in ROLES_QUE_VEN_COSTO_INSUMO:
+            datos.pop('costo_unitario', None)
+        return datos
 
     def validate_nombre(self, nombre):
         restaurante_id = self.context['request'].user.restaurante_id
@@ -131,8 +144,7 @@ class ProductoRecetaSerializer(serializers.ModelSerializer):
 
     def to_representation(self, producto):
         datos = super().to_representation(producto)
-        request = self.context.get('request')
-        if request is None or getattr(request.user, 'rol', '').upper() != 'ADMINISTRADOR':
+        if rol_de(self.context) != 'ADMINISTRADOR':
             for campo in self.CAMPOS_DE_COSTO:
                 datos.pop(campo, None)
             for linea in datos['detalles_receta']:
