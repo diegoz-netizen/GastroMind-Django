@@ -7,7 +7,7 @@ from django.conf import settings
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from .models import Categoria, Empleado, Ingrediente, Producto, RecetaDetalle, Restaurante, Rol
+from .models import Categoria, Empleado, Ingrediente, MovimientoInventario, Producto, RecetaDetalle, Restaurante, Rol
 
 URL = '/api/catalogo/insumos/'
 
@@ -227,6 +227,18 @@ class RegistrarInsumoTest(BaseCatalogoTest):
 
     def test_stock_actual_negativo_responde_400(self):
         self.assertError400(self.registrar(stock_actual='-1'), 'stock_actual')
+
+    # --- stock con 3 decimales (migración 005) ---
+
+    def test_stock_con_tres_decimales_no_se_redondea(self):
+        respuesta = self.registrar(stock_actual='1.995', stock_minimo='0.005')
+        self.assertEqual(respuesta.status_code, 201, respuesta.content)
+        self.assertEqual((respuesta.json()['stock_actual'], respuesta.json()['stock_minimo']), ('1.995', '0.005'))
+        insumo = Ingrediente.objects.get(id=respuesta.json()['id'])
+        self.assertEqual((insumo.stock_actual, insumo.stock_minimo), (Decimal('1.995'), Decimal('0.005')))
+
+    def test_stock_con_mas_de_tres_decimales_responde_400(self):
+        self.assertError400(self.registrar(stock_actual='1.0005'), 'stock_actual')
 
     def test_no_guarda_nada_si_hay_error(self):
         antes = Ingrediente.objects.count()
@@ -720,3 +732,34 @@ class CorsTest(TestCase):
         for origen in ('http://localhost:5174', 'http://localhost:3000', 'https://pagina-cualquiera.com'):
             with self.subTest(origen=origen):
                 self.assertNotIn('Access-Control-Allow-Origin', self.preflight(origen))
+
+
+class MovimientoInventarioTest(BaseCatalogoTest):
+    """Sprint 3: Django lee el kardex que escribe Spring (tabla movimiento_inventario)."""
+
+    def test_el_kardex_de_un_insumo_sale_en_orden_y_su_ultimo_saldo_es_el_stock(self):
+        ahora = datetime.now(timezone.utc)
+
+        def movimiento(tipo, cantidad, saldo, hace, **origen):
+            return MovimientoInventario.objects.create(
+                ingrediente=self.tomate, tipo=tipo, cantidad=Decimal(cantidad), saldo=Decimal(saldo),
+                empleado=None if tipo == 'AJUSTE' else self.almacenero_central, fecha=ahora - hace, **origen)
+
+        # Se crean desordenados a propósito: el orden lo da la fecha
+        movimiento('CONSUMO', '-0.200', '2.500', timedelta(days=1), pedido_detalle_id=7)
+        movimiento('AJUSTE', '1.200', '1.200', timedelta(days=5))
+        movimiento('MERMA', '-0.500', '2.000', timedelta(hours=12), registro_merma_id=3)
+        movimiento('INGRESO', '1.500', '2.700', timedelta(days=4), registro_ingreso_id=9)
+
+        kardex = list(self.tomate.movimientos.all())
+
+        self.assertEqual([m.tipo for m in kardex], ['AJUSTE', 'INGRESO', 'CONSUMO', 'MERMA'])
+        self.assertEqual(kardex[-1].saldo, self.tomate.stock_actual)
+        self.assertEqual(sum(m.cantidad for m in kardex), self.tomate.stock_actual)
+        self.assertIsNone(kardex[0].empleado)
+
+    def test_los_movimientos_son_de_su_insumo(self):
+        MovimientoInventario.objects.create(ingrediente=self.pollo_norte, tipo='AJUSTE', cantidad=Decimal('10'),
+                                            saldo=Decimal('10'), fecha=datetime.now(timezone.utc))
+        self.assertFalse(self.tomate.movimientos.exists())
+        self.assertEqual(self.pollo_norte.movimientos.count(), 1)
