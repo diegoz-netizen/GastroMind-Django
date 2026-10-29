@@ -7,8 +7,8 @@ from rest_framework.response import Response
 
 from .models import Categoria, Ingrediente, Producto
 from .permissions import EsAdminOAlmaceneroParaEscribir, EsAdminParaEscribir
-from .serializers import (CategoriaSerializer, EstadoProductoSerializer, GuardarRecetaSerializer, IngredienteSerializer,
-                          ProductoRecetaSerializer)
+from .serializers import (ROLES_QUE_VEN_COSTO_INSUMO, CategoriaSerializer, EstadoProductoSerializer,
+                          GuardarRecetaSerializer, IngredienteSerializer, ProductoRecetaSerializer)
 
 
 class Conflicto(APIException):
@@ -24,13 +24,21 @@ class IngredienteViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelViewSet)
     GET  /api/catalogo/insumos/        lista los insumos del restaurante del token (?search=, ?ordering=)
     GET  /api/catalogo/insumos/{id}/   un insumo de otro restaurante responde 404 (no se revela que existe)
     POST /api/catalogo/insumos/        HU-05: registra un insumo (CA-05). Solo ADMINISTRADOR o ALMACENERO.
+    El costo_unitario solo lo ven el ADMINISTRADOR y el ALMACENERO (Review 2).
     """
 
     serializer_class = IngredienteSerializer
     permission_classes = [IsAuthenticated, EsAdminOAlmaceneroParaEscribir]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['nombre']
-    ordering_fields = ['nombre', 'stock_actual', 'costo_unitario']
+
+    @property
+    def ordering_fields(self):
+        # Quien no ve el costo tampoco puede ordenar por él: el orden lo delataría
+        campos = ['nombre', 'stock_actual']
+        if self.request.user.rol.upper() in ROLES_QUE_VEN_COSTO_INSUMO:
+            campos.append('costo_unitario')
+        return campos
 
     def get_queryset(self):
         # Multi-tenant: SIEMPRE filtrado por el restaurante del empleado autenticado
@@ -78,6 +86,7 @@ class ProductoViewSet(viewsets.ModelViewSet):
     PATCH /api/catalogo/productos/{id}/estado/   activa o desactiva (CA-07)
     DELETE no existe (405): un platillo desactivado se conserva en el historial de ventas.
     HU-08: cada platillo trae costo, margen y porcentaje_costo, calculados con su receta (CA-08).
+    Solo los ve el ADMINISTRADOR, y salen en null si el platillo no lleva receta o aún no la tiene (Review 2).
     """
 
     permission_classes = [IsAuthenticated, EsAdminParaEscribir]
@@ -104,14 +113,14 @@ class ProductoViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         producto.estado = serializer.validated_data['estado']
         producto.save(update_fields=['estado'])
-        return Response(ProductoRecetaSerializer(producto).data)
+        return Response(self.get_serializer(producto).data)
 
     @action(detail=True, methods=['post', 'get'], url_path='receta')
     def receta(self, request, pk=None):
         producto = self.get_object()
 
         if request.method == 'GET':
-            serializer = ProductoRecetaSerializer(producto)
+            serializer = self.get_serializer(producto)
             return Response(serializer.data)
 
         if request.method == 'POST':
@@ -124,5 +133,5 @@ class ProductoViewSet(viewsets.ModelViewSet):
             serializer.save()
             # Se vuelve a leer: el producto trae la receta anterior ya cargada (prefetch) y el costo saldría viejo
             producto = self.get_queryset().get(pk=producto.pk)
-            res_serializer = ProductoRecetaSerializer(producto)
+            res_serializer = self.get_serializer(producto)
             return Response(res_serializer.data, status=status.HTTP_200_OK)

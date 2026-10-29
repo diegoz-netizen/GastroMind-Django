@@ -8,6 +8,13 @@ from .models import Categoria, Ingrediente, Producto, RecetaDetalle
 # Las de la tabla ingrediente (comentario de unidad_medida en script_database.sql)
 UNIDADES = ['g', 'kg', 'ml', 'l', 'unidades']
 MAYOR_QUE_CERO = 'Debe ser mayor que 0.'
+# Review 2: el costo de un insumo solo lo ven quienes compran o costean (HU-05 y HU-14)
+ROLES_QUE_VEN_COSTO_INSUMO = {'ADMINISTRADOR', 'ALMACENERO'}
+
+
+def rol_de(context):
+    request = context.get('request')
+    return getattr(getattr(request, 'user', None), 'rol', '').upper()
 
 
 class IngredienteSerializer(serializers.ModelSerializer):
@@ -38,6 +45,12 @@ class IngredienteSerializer(serializers.ModelSerializer):
                   'tipo_control', 'dotacion_cantidad', 'dotacion_periodo', 'bajo_stock_minimo']
         # El UNIQUE (restaurante, nombre) se valida a mano en validate_nombre: el restaurante no viene en el body
         validators = []
+
+    def to_representation(self, insumo):
+        datos = super().to_representation(insumo)
+        if rol_de(self.context) not in ROLES_QUE_VEN_COSTO_INSUMO:
+            datos.pop('costo_unitario', None)
+        return datos
 
     def validate_nombre(self, nombre):
         restaurante_id = self.context['request'].user.restaurante_id
@@ -126,15 +139,32 @@ class ProductoRecetaSerializer(serializers.ModelSerializer):
                   'costo', 'margen', 'porcentaje_costo']
         read_only_fields = ['estado']
 
+    # Review 2: el costo es dato del negocio; los demás roles ven la carta y la receta sin él
+    CAMPOS_DE_COSTO = ('costo', 'margen', 'porcentaje_costo')
+
+    def to_representation(self, producto):
+        datos = super().to_representation(producto)
+        if rol_de(self.context) != 'ADMINISTRADOR':
+            for campo in self.CAMPOS_DE_COSTO:
+                datos.pop(campo, None)
+            for linea in datos['detalles_receta']:
+                linea.pop('costo_unitario', None)
+        return datos
+
+    @staticmethod
+    def tiene_costo(producto):
+        # Review 2: lo que no lleva receta (o aún no la tiene) sale sin costo, no con 0.00 y 100 % de margen
+        return producto.requiere_receta and len(producto.detalles_receta.all()) > 0
+
     def get_costo(self, producto):
-        return str(costo_de(producto))
+        return str(costo_de(producto)) if self.tiene_costo(producto) else None
 
     def get_margen(self, producto):
-        return str(producto.precio - costo_de(producto))
+        return str(producto.precio - costo_de(producto)) if self.tiene_costo(producto) else None
 
     def get_porcentaje_costo(self, producto):
         # Qué parte del precio se va en insumos (food cost)
-        if not producto.precio:
+        if not producto.precio or not self.tiene_costo(producto):
             return None
         return str((costo_de(producto) / producto.precio * 100).quantize(Decimal('0.1'), ROUND_HALF_UP))
 

@@ -277,6 +277,35 @@ class RegistrarInsumoTest(BaseCatalogoTest):
         self.client.credentials()
         self.assertEqual(self.registrar().status_code, 401)
 
+    # --- quién ve el costo (Review 2) ---
+
+    def insumos_como(self, empleado, query=''):
+        self.con_token(token_como_spring(empleado))
+        return self.client.get(URL + query).json()
+
+    def test_admin_y_almacenero_ven_el_costo_del_insumo(self):
+        self.registrar()
+        for empleado in (self.admin_central, self.almacenero_central):
+            sal = next(i for i in self.insumos_como(empleado) if i['nombre'] == 'Sal')
+            self.assertEqual(sal['costo_unitario'], '1.50')
+
+    def test_cocinero_ve_los_insumos_sin_su_costo(self):
+        self.registrar()
+        insumos = self.insumos_como(self.cocinero_central)
+        self.assertIn('Sal', [i['nombre'] for i in insumos])
+        for insumo in insumos:
+            self.assertNotIn('costo_unitario', insumo)
+
+    def test_cocinero_no_puede_ordenar_por_costo(self):
+        # Sal es el más barato y Azúcar el más caro: por costo no coinciden con el orden por nombre
+        self.registrar(costo_unitario='0.01')
+        self.registrar(nombre='Azúcar', costo_unitario='999.00')
+        orden = '?ordering=costo_unitario,nombre'
+        del_admin = [i['nombre'] for i in self.insumos_como(self.admin_central, orden)]
+        self.assertEqual((del_admin[0], del_admin[-1]), ('Sal', 'Azúcar'))
+        del_cocinero = [i['nombre'] for i in self.insumos_como(self.cocinero_central, orden)]
+        self.assertEqual(del_cocinero, sorted(del_admin))  # el costo se ignora: queda solo por nombre
+
 
 class FormatoErroresTest(BaseCatalogoTest):
     """HL-014: los errores salen como {error, mensaje, campos?}, con los mismos códigos que Spring."""
@@ -670,11 +699,17 @@ class CostoPlatilloTest(BaseCatalogoTest):
 
     def test_la_lista_trae_el_costo_de_cada_platillo(self):
         costos = {p['nombre']: p['costo'] for p in self.client.get(self.URL).json()}
-        self.assertEqual(costos, {'Lomo saltado': '8.30', 'Chicha morada': '0.00'})
+        self.assertEqual(costos, {'Lomo saltado': '8.30', 'Chicha morada': None})
 
-    def test_platillo_sin_receta_cuesta_cero_y_su_margen_es_el_precio(self):
+    def test_platillo_que_no_lleva_receta_sale_sin_costo(self):
+        # Review 2: no 0.00 y 100 % de margen, que parece un dato real
         platillo = self.detalle(self.chicha)
-        self.assertEqual((platillo['costo'], platillo['margen'], platillo['porcentaje_costo']), ('0.00', '12.00', '0.0'))
+        self.assertEqual((platillo['costo'], platillo['margen'], platillo['porcentaje_costo']), (None, None, None))
+
+    def test_platillo_con_receta_pendiente_sale_sin_costo(self):
+        RecetaDetalle.objects.filter(producto=self.lomo).delete()
+        platillo = self.detalle(self.lomo)
+        self.assertEqual((platillo['costo'], platillo['margen'], platillo['porcentaje_costo']), (None, None, None))
 
     def test_al_cambiar_la_receta_cambia_el_costo(self):
         r = self.client.post(f'{self.URL}{self.lomo.id}/receta/',
@@ -700,9 +735,28 @@ class CostoPlatilloTest(BaseCatalogoTest):
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.json()['costo'], '8.30')
 
-    def test_el_cocinero_tambien_ve_el_costo(self):
+    def test_el_cocinero_no_ve_el_costo_en_la_carta(self):
+        # Review 2: costo, margen y % de costo solo los ve el ADMINISTRADOR
         self.con_token(token_como_spring(self.cocinero_central))
-        self.assertEqual(self.detalle(self.lomo)['costo'], '8.30')
+        for platillo in [self.detalle(self.lomo), *self.client.get(self.URL).json()]:
+            for campo in ('costo', 'margen', 'porcentaje_costo'):
+                self.assertNotIn(campo, platillo)
+
+    def test_el_cocinero_ve_la_receta_sin_costos(self):
+        self.con_token(token_como_spring(self.cocinero_central))
+        receta = self.client.get(f'{self.URL}{self.lomo.id}/receta/').json()
+        self.assertNotIn('costo', receta)
+        self.assertEqual(len(receta['detalles_receta']), 2)
+        for linea in receta['detalles_receta']:
+            self.assertNotIn('costo_unitario', linea)
+            self.assertIn('cantidad_requerida', linea)
+
+    def test_el_admin_ve_el_costo_en_la_receta_y_al_cambiar_el_estado(self):
+        receta = self.client.get(f'{self.URL}{self.lomo.id}/receta/').json()
+        self.assertEqual(receta['costo'], '8.30')
+        self.assertIn('costo_unitario', receta['detalles_receta'][0])
+        r = self.client.patch(f'{self.URL}{self.lomo.id}/estado/', {'estado': 'INACTIVO'}, format='json')
+        self.assertEqual(r.json()['costo'], '8.30')
 
 
 class CorsTest(TestCase):
