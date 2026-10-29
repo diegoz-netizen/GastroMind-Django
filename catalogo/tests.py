@@ -225,6 +225,10 @@ class RegistrarInsumoTest(BaseCatalogoTest):
             with self.subTest(minimo=minimo):
                 self.assertError400(self.registrar(stock_minimo=minimo), 'stock_minimo')
 
+    def test_el_admin_de_django_no_deja_editar_el_stock(self):
+        from django.contrib import admin
+        self.assertIn('stock_actual', admin.site._registry[Ingrediente].readonly_fields)
+
     def test_el_stock_inicial_siempre_es_cero(self):
         # PO (28/10): el stock entra solo con las compras (HU-14), que dejan su movimiento en el kardex
         respuesta = self.registrar(stock_actual='5')
