@@ -105,7 +105,8 @@ class Ingrediente(models.Model):
 
     @property
     def bajo_stock_minimo(self):
-        return self.stock_actual < self.stock_minimo
+        # CA-16: la alerta salta cuando el stock "llega" al mínimo, así que el mínimo exacto ya cuenta
+        return self.stock_actual <= self.stock_minimo
 
 
 class Categoria(models.Model):
@@ -176,6 +177,58 @@ class RecetaDetalle(models.Model):
 
     def __str__(self):
         return f"{self.producto.nombre} - {self.ingrediente.nombre} ({self.cantidad_requerida})"
+
+
+class Proveedor(models.Model):
+    """HU-22: proveedor del restaurante. Por ahora solo se lee (HU-16 muestra de quién es cada lote)."""
+
+    id = models.AutoField(primary_key=True)
+    restaurante = models.ForeignKey(
+        Restaurante,
+        on_delete=models.PROTECT,
+        db_column='restaurante_id',
+        related_name='proveedores'
+    )
+    nombre = models.CharField(max_length=150)
+    contacto = models.CharField(max_length=150, null=True, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = 'proveedor'
+
+    def __str__(self):
+        return self.nombre
+
+
+class RegistroIngresoProveedor(models.Model):
+    """HU-14 registra los ingresos de compras (Spring). HU-16 solo lee el vencimiento de cada lote."""
+
+    id = models.AutoField(primary_key=True)
+    empleado = models.ForeignKey(Empleado, on_delete=models.PROTECT, db_column='empleado_id', related_name='+')
+    proveedor = models.ForeignKey(
+        Proveedor,
+        on_delete=models.PROTECT,
+        db_column='proveedor_id',
+        related_name='ingresos'
+    )
+    ingrediente = models.ForeignKey(
+        Ingrediente,
+        on_delete=models.PROTECT,
+        db_column='ingrediente_id',
+        related_name='ingresos'
+    )
+    lote = models.CharField(max_length=50, null=True, blank=True)
+    fecha_vencimiento = models.DateField(null=True, blank=True)  # NULL = no perecible
+    cantidad_recibida = models.DecimalField(max_digits=10, decimal_places=3)
+    costo_total = models.DecimalField(max_digits=10, decimal_places=2)
+    fecha_registro = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = 'registro_ingreso_proveedor'
+
+    def __str__(self):
+        return f'{self.ingrediente.nombre} - lote {self.lote or "s/n"}'
 
 
 class MovimientoInventario(models.Model):

@@ -5,9 +5,11 @@ from unittest import mock
 import jwt
 from django.conf import settings
 from django.test import TestCase
+from django.utils import timezone as dj_timezone
 from rest_framework.test import APIClient
 
-from .models import Categoria, Empleado, Ingrediente, MovimientoInventario, Producto, RecetaDetalle, Restaurante, Rol
+from .models import (Categoria, Empleado, Ingrediente, MovimientoInventario, Producto, Proveedor, RecetaDetalle,
+                     RegistroIngresoProveedor, Restaurante, Rol)
 
 URL = '/api/catalogo/insumos/'
 
@@ -786,6 +788,91 @@ class CorsTest(TestCase):
         for origen in ('http://localhost:5174', 'http://localhost:3000', 'https://pagina-cualquiera.com'):
             with self.subTest(origen=origen):
                 self.assertNotIn('Access-Control-Allow-Origin', self.preflight(origen))
+
+
+URL_ALERTAS = '/api/catalogo/alertas/'
+
+
+class AlertasTest(BaseCatalogoTest):
+    """HU-16 (CA-16): stock en el mínimo o debajo, y lotes que vencen en 3 días o menos."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.sal = Ingrediente.objects.create(restaurante=cls.central, nombre='Sal', unidad_medida='kg',
+                                             stock_actual=Decimal('5'), stock_minimo=Decimal('5'),
+                                             costo_unitario=Decimal('1.00'))
+        cls.proveedor = Proveedor.objects.create(restaurante=cls.central, nombre='Mercado Central')
+        cls.proveedor_norte = Proveedor.objects.create(restaurante=cls.norte, nombre='Mercado Norte')
+
+    def lote(self, insumo, vence_en_dias, lote='L-1', proveedor=None):
+        hoy = dj_timezone.localdate()
+        vence = None if vence_en_dias is None else hoy + timedelta(days=vence_en_dias)
+        return RegistroIngresoProveedor.objects.create(
+            empleado=self.admin_central, proveedor=proveedor or self.proveedor, ingrediente=insumo, lote=lote,
+            fecha_vencimiento=vence, cantidad_recibida=Decimal('3'), costo_total=Decimal('30'),
+            fecha_registro=datetime.now(timezone.utc))
+
+    def alertas(self, empleado=None):
+        self.con_token(token_como_spring(empleado or self.admin_central))
+        return self.client.get(URL_ALERTAS)
+
+    def test_stock_en_el_minimo_o_debajo_salta_y_encima_no(self):
+        datos = self.alertas().json()
+        self.assertEqual([i['nombre'] for i in datos['stock_minimo']], ['Sal', 'Tomate'])  # Arroz 20/5 no
+        tomate = datos['stock_minimo'][1]
+        self.assertEqual(Decimal(tomate['faltante']), Decimal('3'))
+
+    def test_el_listado_de_insumos_tambien_marca_el_minimo_exacto(self):
+        # Mismo criterio en HU-05: con stock = mínimo, bajo_stock_minimo ya es True
+        self.con_token(token_como_spring(self.admin_central))
+        datos = {i['nombre']: i['bajo_stock_minimo'] for i in self.client.get(URL).json()}
+        self.assertTrue(datos['Sal'])
+
+    def test_lote_que_vence_en_3_dias_salta_y_en_4_no(self):
+        self.lote(self.arroz, 3, lote='VENCE-3')
+        self.lote(self.arroz, 4, lote='VENCE-4')
+        self.lote(self.arroz, 0, lote='VENCE-HOY')
+        self.lote(self.arroz, None, lote='NO-PERECIBLE')
+        datos = self.alertas().json()['vencimiento']
+        self.assertEqual([(l['lote'], l['dias_restantes'], l['vencido']) for l in datos],
+                         [('VENCE-HOY', 0, False), ('VENCE-3', 3, False)])
+        self.assertEqual(datos[0]['proveedor'], 'Mercado Central')
+        self.assertEqual(datos[0]['insumo'], 'Arroz')
+
+    def test_lote_vencido_sale_solo_si_el_insumo_tiene_stock(self):
+        sin_stock = Ingrediente.objects.create(restaurante=self.central, nombre='Leche', unidad_medida='l',
+                                               stock_actual=Decimal('0'), stock_minimo=Decimal('1'),
+                                               costo_unitario=Decimal('4.00'))
+        self.lote(self.arroz, -2, lote='VENCIDO-CON-STOCK')
+        self.lote(sin_stock, -2, lote='VENCIDO-SIN-STOCK')
+        datos = self.alertas().json()['vencimiento']
+        self.assertEqual([(l['lote'], l['dias_restantes'], l['vencido']) for l in datos],
+                         [('VENCIDO-CON-STOCK', -2, True)])
+
+    def test_total_suma_las_dos_listas(self):
+        self.lote(self.arroz, 1)
+        datos = self.alertas().json()
+        self.assertEqual(datos['total'], 3)  # Sal + Tomate + 1 lote
+
+    def test_no_muestra_alertas_de_otro_restaurante(self):
+        pollo_bajo = Ingrediente.objects.create(restaurante=self.norte, nombre='Ají', unidad_medida='kg',
+                                                stock_actual=Decimal('0'), stock_minimo=Decimal('2'),
+                                                costo_unitario=Decimal('3.00'))
+        self.lote(pollo_bajo, 1, lote='NORTE', proveedor=self.proveedor_norte)
+        datos = self.alertas().json()
+        self.assertNotIn('Ají', [i['nombre'] for i in datos['stock_minimo']])
+        self.assertEqual(datos['vencimiento'], [])
+        norte = self.alertas(self.admin_norte).json()
+        self.assertEqual([i['nombre'] for i in norte['stock_minimo']], ['Ají'])
+        self.assertEqual([l['lote'] for l in norte['vencimiento']], ['NORTE'])
+
+    def test_almacenero_las_ve_y_cocina_recibe_403(self):
+        self.assertEqual(self.alertas(self.almacenero_central).status_code, 200)
+        self.assertEqual(self.alertas(self.cocinero_central).status_code, 403)
+
+    def test_sin_token_responde_401(self):
+        self.assertEqual(self.client.get(URL_ALERTAS).status_code, 401)
 
 
 class MovimientoInventarioTest(BaseCatalogoTest):

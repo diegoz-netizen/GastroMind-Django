@@ -1,14 +1,20 @@
+from datetime import timedelta
+
 from django.db import IntegrityError, transaction
+from django.db.models import F, Q
+from django.utils import timezone
 from rest_framework import filters, mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import APIException, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
-from .models import Categoria, Ingrediente, Producto
-from .permissions import EsAdminOAlmaceneroParaEscribir, EsAdminParaEscribir
-from .serializers import (ROLES_QUE_VEN_COSTO_INSUMO, CategoriaSerializer, EstadoProductoSerializer,
-                          GuardarRecetaSerializer, IngredienteSerializer, ProductoRecetaSerializer)
+from .models import Categoria, Ingrediente, Producto, RegistroIngresoProveedor
+from .permissions import EsAdminOAlmacenero, EsAdminOAlmaceneroParaEscribir, EsAdminParaEscribir
+from .serializers import (ROLES_QUE_VEN_COSTO_INSUMO, AlertaStockSerializer, AlertaVencimientoSerializer,
+                          CategoriaSerializer, EstadoProductoSerializer, GuardarRecetaSerializer,
+                          IngredienteSerializer, ProductoRecetaSerializer)
 
 
 class Conflicto(APIException):
@@ -135,3 +141,35 @@ class ProductoViewSet(viewsets.ModelViewSet):
             producto = self.get_queryset().get(pk=producto.pk)
             res_serializer = self.get_serializer(producto)
             return Response(res_serializer.data, status=status.HTTP_200_OK)
+
+
+# CA-16: avisar 3 días antes del vencimiento
+DIAS_AVISO_VENCIMIENTO = 3
+
+
+class AlertasView(APIView):
+    """
+    GET /api/catalogo/alertas/   HU-16 (CA-16), solo del restaurante del token:
+      - stock_minimo: insumos con stock_actual <= stock_minimo
+      - vencimiento: lotes que vencen en 3 días o menos. Los ya vencidos salen mientras el insumo tenga stock
+        (no se lleva stock por lote: con stock 0 ya no queda nada de ese lote que revisar)
+    Solo ADMINISTRADOR o ALMACENERO.
+    """
+
+    permission_classes = [IsAuthenticated, EsAdminOAlmacenero]
+
+    def get(self, request):
+        restaurante_id = request.user.restaurante_id
+        hoy = timezone.localdate()  # hora de Perú (TIME_ZONE), no UTC: el día cambia a medianoche de Lima
+
+        insumos = Ingrediente.objects.filter(restaurante_id=restaurante_id, stock_actual__lte=F('stock_minimo'))
+        lotes = (RegistroIngresoProveedor.objects
+                 .filter(ingrediente__restaurante_id=restaurante_id,
+                         fecha_vencimiento__lte=hoy + timedelta(days=DIAS_AVISO_VENCIMIENTO))
+                 .filter(Q(fecha_vencimiento__gte=hoy) | Q(ingrediente__stock_actual__gt=0))
+                 .select_related('ingrediente', 'proveedor')
+                 .order_by('fecha_vencimiento', 'ingrediente__nombre'))
+
+        stock = AlertaStockSerializer(insumos, many=True).data
+        vencimiento = AlertaVencimientoSerializer(lotes, many=True, context={'hoy': hoy}).data
+        return Response({'total': len(stock) + len(vencimiento), 'stock_minimo': stock, 'vencimiento': vencimiento})
