@@ -32,9 +32,9 @@ class IngredienteSerializer(serializers.ModelSerializer):
     # Stock con 3 decimales (migración 005): con 2, la API redondeaba un saldo de 1,995 kg a 2,00
     stock_minimo = serializers.DecimalField(max_digits=10, decimal_places=3, min_value=Decimal('0.001'),
                                             error_messages={'min_value': MAYOR_QUE_CERO})
-    stock_actual = serializers.DecimalField(max_digits=10, decimal_places=3, min_value=Decimal('0'),
-                                            required=False, default=Decimal('0'),
-                                            error_messages={'min_value': 'No puede ser negativo.'})
+    # Solo lectura (PO, 28/10): un insumo nace con stock 0 y el stock solo cambia por InventarioService de Spring
+    # (compras HU-14, consumo HU-13, mermas), que deja su movimiento. Si se aceptara aquí, el kardex no cuadraría
+    stock_actual = serializers.DecimalField(max_digits=10, decimal_places=3, read_only=True)
     dotacion_cantidad = serializers.DecimalField(max_digits=10, decimal_places=3, min_value=Decimal('0.001'),
                                                  required=False, allow_null=True,
                                                  error_messages={'min_value': MAYOR_QUE_CERO})
