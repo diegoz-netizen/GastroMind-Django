@@ -86,11 +86,12 @@ class Ingrediente(models.Model):
     )
     nombre = models.CharField(max_length=150)
     unidad_medida = models.CharField(max_length=20)
-    stock_actual = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    stock_minimo = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    # 3 decimales, como la receta (migración 005): un descuento de 0,005 kg no se redondea
+    stock_actual = models.DecimalField(max_digits=10, decimal_places=3, default=0)
+    stock_minimo = models.DecimalField(max_digits=10, decimal_places=3, default=0)
     costo_unitario = models.DecimalField(max_digits=10, decimal_places=2)
     tipo_control = models.CharField(max_length=20, choices=TIPO_CONTROL, default='RECETA')
-    dotacion_cantidad = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    dotacion_cantidad = models.DecimalField(max_digits=10, decimal_places=3, null=True, blank=True)
     dotacion_periodo = models.CharField(max_length=20, choices=DOTACION_PERIODO, null=True, blank=True)
 
     class Meta:
@@ -175,3 +176,48 @@ class RecetaDetalle(models.Model):
 
     def __str__(self):
         return f"{self.producto.nombre} - {self.ingrediente.nombre} ({self.cantidad_requerida})"
+
+
+class MovimientoInventario(models.Model):
+    """
+    Sprint 3 (migración 005): cada cambio de stock de un insumo, con la cantidad (+ entra, - sale)
+    y el saldo que quedó. Lo escribe SOLO Spring (InventarioService, junto con stock_actual y con la
+    fila del insumo bloqueada); Django únicamente lo lee para el kardex (HU-15). No se crea, edita ni
+    borra desde aquí.
+    Los orígenes van como id: pedido_detalle, registro_ingreso_proveedor y registro_merma todavía no
+    tienen modelo en Django (la FK la pone el script).
+    """
+
+    TIPOS = [('INGRESO', 'Ingreso'), ('CONSUMO', 'Consumo'), ('MERMA', 'Merma'), ('AJUSTE', 'Ajuste')]
+
+    id = models.BigAutoField(primary_key=True)
+    ingrediente = models.ForeignKey(
+        Ingrediente,
+        on_delete=models.PROTECT,
+        db_column='ingrediente_id',
+        related_name='movimientos'
+    )
+    tipo = models.CharField(max_length=20, choices=TIPOS)
+    cantidad = models.DecimalField(max_digits=10, decimal_places=3)
+    saldo = models.DecimalField(max_digits=10, decimal_places=3)
+    # NULL solo en el saldo inicial que carga una migración
+    empleado = models.ForeignKey(
+        Empleado,
+        on_delete=models.PROTECT,
+        db_column='empleado_id',
+        null=True,
+        blank=True,
+        related_name='movimientos_inventario'
+    )
+    pedido_detalle_id = models.BigIntegerField(null=True, blank=True)
+    registro_ingreso_id = models.BigIntegerField(null=True, blank=True)
+    registro_merma_id = models.BigIntegerField(null=True, blank=True)
+    fecha = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = 'movimiento_inventario'
+        ordering = ['fecha', 'id']
+
+    def __str__(self):
+        return f'{self.tipo} {self.cantidad} → {self.saldo} ({self.ingrediente_id})'

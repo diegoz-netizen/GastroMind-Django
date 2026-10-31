@@ -29,12 +29,13 @@ class IngredienteSerializer(serializers.ModelSerializer):
     unidad_medida = serializers.ChoiceField(choices=UNIDADES)
     costo_unitario = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=Decimal('0.01'),
                                               error_messages={'min_value': MAYOR_QUE_CERO})
-    stock_minimo = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=Decimal('0.01'),
+    # Stock con 3 decimales (migración 005): con 2, la API redondeaba un saldo de 1,995 kg a 2,00
+    stock_minimo = serializers.DecimalField(max_digits=10, decimal_places=3, min_value=Decimal('0.001'),
                                             error_messages={'min_value': MAYOR_QUE_CERO})
-    stock_actual = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=Decimal('0'),
+    stock_actual = serializers.DecimalField(max_digits=10, decimal_places=3, min_value=Decimal('0'),
                                             required=False, default=Decimal('0'),
                                             error_messages={'min_value': 'No puede ser negativo.'})
-    dotacion_cantidad = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=Decimal('0.01'),
+    dotacion_cantidad = serializers.DecimalField(max_digits=10, decimal_places=3, min_value=Decimal('0.001'),
                                                  required=False, allow_null=True,
                                                  error_messages={'min_value': MAYOR_QUE_CERO})
     bajo_stock_minimo = serializers.BooleanField(read_only=True)
