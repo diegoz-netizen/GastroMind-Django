@@ -8,8 +8,8 @@ from django.test import TestCase
 from django.utils import timezone as dj_timezone
 from rest_framework.test import APIClient
 
-from .models import (Categoria, Empleado, Ingrediente, Producto, Proveedor, RecetaDetalle, RegistroIngresoProveedor,
-                     Restaurante, Rol)
+from .models import (Categoria, Empleado, Ingrediente, MovimientoInventario, Producto, Proveedor, RecetaDetalle,
+                     RegistroIngresoProveedor, Restaurante, Rol)
 
 URL = '/api/catalogo/insumos/'
 
@@ -230,6 +230,18 @@ class RegistrarInsumoTest(BaseCatalogoTest):
     def test_stock_actual_negativo_responde_400(self):
         self.assertError400(self.registrar(stock_actual='-1'), 'stock_actual')
 
+    # --- stock con 3 decimales (migración 005) ---
+
+    def test_stock_con_tres_decimales_no_se_redondea(self):
+        respuesta = self.registrar(stock_actual='1.995', stock_minimo='0.005')
+        self.assertEqual(respuesta.status_code, 201, respuesta.content)
+        self.assertEqual((respuesta.json()['stock_actual'], respuesta.json()['stock_minimo']), ('1.995', '0.005'))
+        insumo = Ingrediente.objects.get(id=respuesta.json()['id'])
+        self.assertEqual((insumo.stock_actual, insumo.stock_minimo), (Decimal('1.995'), Decimal('0.005')))
+
+    def test_stock_con_mas_de_tres_decimales_responde_400(self):
+        self.assertError400(self.registrar(stock_actual='1.0005'), 'stock_actual')
+
     def test_no_guarda_nada_si_hay_error(self):
         antes = Ingrediente.objects.count()
         self.registrar(costo_unitario='0')
@@ -278,6 +290,35 @@ class RegistrarInsumoTest(BaseCatalogoTest):
     def test_sin_token_responde_401(self):
         self.client.credentials()
         self.assertEqual(self.registrar().status_code, 401)
+
+    # --- quién ve el costo (Review 2) ---
+
+    def insumos_como(self, empleado, query=''):
+        self.con_token(token_como_spring(empleado))
+        return self.client.get(URL + query).json()
+
+    def test_admin_y_almacenero_ven_el_costo_del_insumo(self):
+        self.registrar()
+        for empleado in (self.admin_central, self.almacenero_central):
+            sal = next(i for i in self.insumos_como(empleado) if i['nombre'] == 'Sal')
+            self.assertEqual(sal['costo_unitario'], '1.50')
+
+    def test_cocinero_ve_los_insumos_sin_su_costo(self):
+        self.registrar()
+        insumos = self.insumos_como(self.cocinero_central)
+        self.assertIn('Sal', [i['nombre'] for i in insumos])
+        for insumo in insumos:
+            self.assertNotIn('costo_unitario', insumo)
+
+    def test_cocinero_no_puede_ordenar_por_costo(self):
+        # Sal es el más barato y Azúcar el más caro: por costo no coinciden con el orden por nombre
+        self.registrar(costo_unitario='0.01')
+        self.registrar(nombre='Azúcar', costo_unitario='999.00')
+        orden = '?ordering=costo_unitario,nombre'
+        del_admin = [i['nombre'] for i in self.insumos_como(self.admin_central, orden)]
+        self.assertEqual((del_admin[0], del_admin[-1]), ('Sal', 'Azúcar'))
+        del_cocinero = [i['nombre'] for i in self.insumos_como(self.cocinero_central, orden)]
+        self.assertEqual(del_cocinero, sorted(del_admin))  # el costo se ignora: queda solo por nombre
 
 
 class FormatoErroresTest(BaseCatalogoTest):
@@ -672,11 +713,17 @@ class CostoPlatilloTest(BaseCatalogoTest):
 
     def test_la_lista_trae_el_costo_de_cada_platillo(self):
         costos = {p['nombre']: p['costo'] for p in self.client.get(self.URL).json()}
-        self.assertEqual(costos, {'Lomo saltado': '8.30', 'Chicha morada': '0.00'})
+        self.assertEqual(costos, {'Lomo saltado': '8.30', 'Chicha morada': None})
 
-    def test_platillo_sin_receta_cuesta_cero_y_su_margen_es_el_precio(self):
+    def test_platillo_que_no_lleva_receta_sale_sin_costo(self):
+        # Review 2: no 0.00 y 100 % de margen, que parece un dato real
         platillo = self.detalle(self.chicha)
-        self.assertEqual((platillo['costo'], platillo['margen'], platillo['porcentaje_costo']), ('0.00', '12.00', '0.0'))
+        self.assertEqual((platillo['costo'], platillo['margen'], platillo['porcentaje_costo']), (None, None, None))
+
+    def test_platillo_con_receta_pendiente_sale_sin_costo(self):
+        RecetaDetalle.objects.filter(producto=self.lomo).delete()
+        platillo = self.detalle(self.lomo)
+        self.assertEqual((platillo['costo'], platillo['margen'], platillo['porcentaje_costo']), (None, None, None))
 
     def test_al_cambiar_la_receta_cambia_el_costo(self):
         r = self.client.post(f'{self.URL}{self.lomo.id}/receta/',
@@ -702,9 +749,28 @@ class CostoPlatilloTest(BaseCatalogoTest):
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.json()['costo'], '8.30')
 
-    def test_el_cocinero_tambien_ve_el_costo(self):
+    def test_el_cocinero_no_ve_el_costo_en_la_carta(self):
+        # Review 2: costo, margen y % de costo solo los ve el ADMINISTRADOR
         self.con_token(token_como_spring(self.cocinero_central))
-        self.assertEqual(self.detalle(self.lomo)['costo'], '8.30')
+        for platillo in [self.detalle(self.lomo), *self.client.get(self.URL).json()]:
+            for campo in ('costo', 'margen', 'porcentaje_costo'):
+                self.assertNotIn(campo, platillo)
+
+    def test_el_cocinero_ve_la_receta_sin_costos(self):
+        self.con_token(token_como_spring(self.cocinero_central))
+        receta = self.client.get(f'{self.URL}{self.lomo.id}/receta/').json()
+        self.assertNotIn('costo', receta)
+        self.assertEqual(len(receta['detalles_receta']), 2)
+        for linea in receta['detalles_receta']:
+            self.assertNotIn('costo_unitario', linea)
+            self.assertIn('cantidad_requerida', linea)
+
+    def test_el_admin_ve_el_costo_en_la_receta_y_al_cambiar_el_estado(self):
+        receta = self.client.get(f'{self.URL}{self.lomo.id}/receta/').json()
+        self.assertEqual(receta['costo'], '8.30')
+        self.assertIn('costo_unitario', receta['detalles_receta'][0])
+        r = self.client.patch(f'{self.URL}{self.lomo.id}/estado/', {'estado': 'INACTIVO'}, format='json')
+        self.assertEqual(r.json()['costo'], '8.30')
 
 
 class CorsTest(TestCase):
@@ -807,3 +873,34 @@ class AlertasTest(BaseCatalogoTest):
 
     def test_sin_token_responde_401(self):
         self.assertEqual(self.client.get(URL_ALERTAS).status_code, 401)
+
+
+class MovimientoInventarioTest(BaseCatalogoTest):
+    """Sprint 3: Django lee el kardex que escribe Spring (tabla movimiento_inventario)."""
+
+    def test_el_kardex_de_un_insumo_sale_en_orden_y_su_ultimo_saldo_es_el_stock(self):
+        ahora = datetime.now(timezone.utc)
+
+        def movimiento(tipo, cantidad, saldo, hace, **origen):
+            return MovimientoInventario.objects.create(
+                ingrediente=self.tomate, tipo=tipo, cantidad=Decimal(cantidad), saldo=Decimal(saldo),
+                empleado=None if tipo == 'AJUSTE' else self.almacenero_central, fecha=ahora - hace, **origen)
+
+        # Se crean desordenados a propósito: el orden lo da la fecha
+        movimiento('CONSUMO', '-0.200', '2.500', timedelta(days=1), pedido_detalle_id=7)
+        movimiento('AJUSTE', '1.200', '1.200', timedelta(days=5))
+        movimiento('MERMA', '-0.500', '2.000', timedelta(hours=12), registro_merma_id=3)
+        movimiento('INGRESO', '1.500', '2.700', timedelta(days=4), registro_ingreso_id=9)
+
+        kardex = list(self.tomate.movimientos.all())
+
+        self.assertEqual([m.tipo for m in kardex], ['AJUSTE', 'INGRESO', 'CONSUMO', 'MERMA'])
+        self.assertEqual(kardex[-1].saldo, self.tomate.stock_actual)
+        self.assertEqual(sum(m.cantidad for m in kardex), self.tomate.stock_actual)
+        self.assertIsNone(kardex[0].empleado)
+
+    def test_los_movimientos_son_de_su_insumo(self):
+        MovimientoInventario.objects.create(ingrediente=self.pollo_norte, tipo='AJUSTE', cantidad=Decimal('10'),
+                                            saldo=Decimal('10'), fecha=datetime.now(timezone.utc))
+        self.assertFalse(self.tomate.movimientos.exists())
+        self.assertEqual(self.pollo_norte.movimientos.count(), 1)
