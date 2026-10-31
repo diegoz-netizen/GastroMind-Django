@@ -1,8 +1,9 @@
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 
 from django.db import IntegrityError, transaction
 from django.db.models import F, Q
 from django.utils import timezone
+from django.utils.dateparse import parse_date
 from rest_framework import filters, mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import APIException, ValidationError
@@ -14,7 +15,8 @@ from .models import Categoria, Ingrediente, Producto, RegistroIngresoProveedor
 from .permissions import EsAdminOAlmacenero, EsAdminOAlmaceneroParaEscribir, EsAdminParaEscribir
 from .serializers import (ROLES_QUE_VEN_COSTO_INSUMO, AlertaStockSerializer, AlertaVencimientoSerializer,
                           CategoriaSerializer, EstadoProductoSerializer, GuardarRecetaSerializer,
-                          IngredienteSerializer, ProductoRecetaSerializer)
+                          IngredienteSerializer, KardexMovimientoSerializer, KardexOrigenes,
+                          ProductoRecetaSerializer)
 
 
 class Conflicto(APIException):
@@ -30,6 +32,7 @@ class IngredienteViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelViewSet)
     GET  /api/catalogo/insumos/        lista los insumos del restaurante del token (?search=, ?ordering=)
     GET  /api/catalogo/insumos/{id}/   un insumo de otro restaurante responde 404 (no se revela que existe)
     POST /api/catalogo/insumos/        HU-05: registra un insumo (CA-05). Solo ADMINISTRADOR o ALMACENERO.
+    GET  /api/catalogo/insumos/{id}/kardex/?desde=&hasta=   HU-15: sus movimientos. Solo ADMINISTRADOR o ALMACENERO.
     El costo_unitario solo lo ven el ADMINISTRADOR y el ALMACENERO (Review 2).
     """
 
@@ -58,6 +61,44 @@ class IngredienteViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelViewSet)
         except IntegrityError:
             # Dos altas del mismo nombre a la vez: la segunda choca con el UNIQUE de la tabla
             raise ValidationError({'nombre': ['Ya existe un insumo con ese nombre en el restaurante.']})
+
+    @action(detail=True, methods=['get'], url_path='kardex', permission_classes=[IsAuthenticated, EsAdminOAlmacenero])
+    def kardex(self, request, pk=None):
+        """HU-15 (CA-15): ingresos, salidas por venta y mermas del insumo, del más antiguo al más nuevo."""
+        insumo = self.get_object()
+        desde = self._leer_fecha('desde')
+        hasta = self._leer_fecha('hasta')
+        if desde and hasta and desde > hasta:
+            raise ValidationError({'desde': ['La fecha inicial no puede ser mayor que la final.']})
+
+        movimientos = insumo.movimientos.select_related('empleado')
+        # Las fechas son días de Perú (TIME_ZONE), con los dos extremos incluidos
+        if desde:
+            movimientos = movimientos.filter(fecha__gte=timezone.make_aware(datetime.combine(desde, time.min)))
+        if hasta:
+            siguiente = hasta + timedelta(days=1)
+            movimientos = movimientos.filter(fecha__lt=timezone.make_aware(datetime.combine(siguiente, time.min)))
+
+        movimientos = list(movimientos)
+        filas = KardexMovimientoSerializer(movimientos, many=True,
+                                           context={'origenes': KardexOrigenes(movimientos)}).data
+        return Response({
+            'insumo': {'id': insumo.id, 'nombre': insumo.nombre, 'unidad_medida': insumo.unidad_medida,
+                       'stock_actual': str(insumo.stock_actual)},
+            'movimientos': filas,
+        })
+
+    def _leer_fecha(self, nombre):
+        valor = self.request.query_params.get(nombre)
+        if not valor:
+            return None
+        try:
+            fecha = parse_date(valor)
+        except ValueError:
+            fecha = None
+        if fecha is None:
+            raise ValidationError({nombre: ['Use el formato AAAA-MM-DD.']})
+        return fecha
 
 
 class CategoriaViewSet(viewsets.ModelViewSet):

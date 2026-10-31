@@ -3,7 +3,8 @@ from decimal import ROUND_HALF_UP, Decimal
 from django.db import transaction
 from rest_framework import serializers
 
-from .models import Categoria, Ingrediente, Producto, RecetaDetalle, RegistroIngresoProveedor
+from .models import (Categoria, Ingrediente, MovimientoInventario, PedidoDetalle, Producto, RecetaDetalle,
+                     RegistroIngresoProveedor, RegistroMerma)
 
 # Las de la tabla ingrediente (comentario de unidad_medida en script_database.sql)
 UNIDADES = ['g', 'kg', 'ml', 'l', 'unidades']
@@ -252,3 +253,54 @@ class AlertaVencimientoSerializer(serializers.ModelSerializer):
 
     def get_vencido(self, ingreso):
         return ingreso.fecha_vencimiento < self.context['hoy']
+
+
+class KardexOrigenes:
+    """
+    HU-15: de dónde salió cada movimiento. Trae de una sola vez las compras, las mermas y los platillos
+    de la lista, así el kardex no hace una consulta por fila.
+    """
+
+    def __init__(self, movimientos):
+        self.compras = RegistroIngresoProveedor.objects.select_related('proveedor').in_bulk(
+            [m.registro_ingreso_id for m in movimientos if m.registro_ingreso_id])
+        self.mermas = RegistroMerma.objects.select_related('motivo').in_bulk(
+            [m.registro_merma_id for m in movimientos if m.registro_merma_id])
+        self.platillos = PedidoDetalle.objects.select_related('producto').in_bulk(
+            [m.pedido_detalle_id for m in movimientos if m.pedido_detalle_id])
+
+    def de(self, movimiento):
+        if movimiento.registro_ingreso_id:
+            compra = self.compras[movimiento.registro_ingreso_id]
+            return {'proveedor': compra.proveedor.nombre, 'lote': compra.lote, 'costo_total': str(compra.costo_total)}
+        if movimiento.registro_merma_id:
+            return {'motivo': self.mermas[movimiento.registro_merma_id].motivo.nombre}
+        if movimiento.pedido_detalle_id:
+            platillo = self.platillos[movimiento.pedido_detalle_id]
+            return {'pedido_id': platillo.pedido_id, 'platillo': platillo.producto.nombre}
+        return None  # AJUSTE: saldo inicial o conteo físico
+
+
+class KardexMovimientoSerializer(serializers.ModelSerializer):
+    """
+    HU-15: una fila del kardex. La cantidad va en entrada o en salida, siempre en positivo.
+    origen sale del contexto (se busca una sola vez para todos los movimientos, ver KardexOrigenes).
+    """
+
+    entrada = serializers.SerializerMethodField()
+    salida = serializers.SerializerMethodField()
+    empleado = serializers.CharField(source='empleado.nombre_completo', default=None)
+    origen = serializers.SerializerMethodField()
+
+    class Meta:
+        model = MovimientoInventario
+        fields = ['id', 'fecha', 'tipo', 'entrada', 'salida', 'saldo', 'empleado', 'origen']
+
+    def get_entrada(self, movimiento):
+        return str(movimiento.cantidad) if movimiento.cantidad > 0 else None
+
+    def get_salida(self, movimiento):
+        return str(-movimiento.cantidad) if movimiento.cantidad < 0 else None
+
+    def get_origen(self, movimiento):
+        return self.context['origenes'].de(movimiento)
