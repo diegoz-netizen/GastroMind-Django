@@ -8,8 +8,8 @@ from django.test import TestCase
 from django.utils import timezone as dj_timezone
 from rest_framework.test import APIClient
 
-from .models import (Categoria, Empleado, Ingrediente, MovimientoInventario, Producto, Proveedor, RecetaDetalle,
-                     RegistroIngresoProveedor, Restaurante, Rol)
+from .models import (Categoria, Empleado, Ingrediente, MotivoMerma, MovimientoInventario, PedidoDetalle, Producto,
+                     Proveedor, RecetaDetalle, RegistroIngresoProveedor, RegistroMerma, Restaurante, Rol)
 
 URL = '/api/catalogo/insumos/'
 
@@ -904,3 +904,98 @@ class MovimientoInventarioTest(BaseCatalogoTest):
                                             saldo=Decimal('10'), fecha=datetime.now(timezone.utc))
         self.assertFalse(self.tomate.movimientos.exists())
         self.assertEqual(self.pollo_norte.movimientos.count(), 1)
+
+
+class KardexTest(BaseCatalogoTest):
+    """HU-15 (CA-15): ingresos, salidas por venta y mermas de un insumo, filtrables por fecha."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.ahora = dj_timezone.now()
+
+        def movimiento(tipo, cantidad, saldo, hace_dias, empleado=cls.almacenero_central, **origen):
+            return MovimientoInventario.objects.create(
+                ingrediente=cls.tomate, tipo=tipo, cantidad=Decimal(cantidad), saldo=Decimal(saldo),
+                empleado=empleado, fecha=cls.ahora - timedelta(days=hace_dias), **origen)
+
+        proveedor = Proveedor.objects.create(restaurante=cls.central, nombre='Mercado Central')
+        compra = RegistroIngresoProveedor.objects.create(
+            empleado=cls.almacenero_central, proveedor=proveedor, ingrediente=cls.tomate, lote='L-7',
+            cantidad_recibida=Decimal('3.500'), costo_total=Decimal('21.00'), fecha_registro=cls.ahora)
+        motivo = MotivoMerma.objects.create(nombre='Vencido', es_global=True)
+        merma = RegistroMerma.objects.create(empleado=cls.almacenero_central, ingrediente=cls.tomate,
+                                             cantidad=Decimal('0.500'), motivo=motivo, fecha_registro=cls.ahora)
+        categoria = Categoria.objects.create(restaurante=cls.central, nombre='Platos')
+        lomo = Producto.objects.create(categoria=categoria, nombre='Lomo saltado', precio=Decimal('30.00'))
+        platillo = PedidoDetalle.objects.create(pedido_id=77, producto=lomo, cantidad=1, estado='SERVIDO')
+
+        movimiento('AJUSTE', '-1.000', '-1.000', 10, empleado=None)
+        movimiento('INGRESO', '3.500', '2.500', 5, registro_ingreso_id=compra.id)
+        movimiento('CONSUMO', '-0.200', '2.300', 3, pedido_detalle_id=platillo.id)
+        movimiento('MERMA', '-0.300', '2.000', 1, registro_merma_id=merma.id)
+
+    def url(self, insumo=None):
+        return f'{URL}{(insumo or self.tomate).id}/kardex/'
+
+    def kardex(self, empleado=None, **filtros):
+        self.con_token(token_como_spring(empleado or self.admin_central))
+        return self.client.get(self.url(), filtros)
+
+    def dia(self, hace_dias):
+        return dj_timezone.localtime(self.ahora - timedelta(days=hace_dias)).date().isoformat()
+
+    def test_lista_los_movimientos_en_orden_y_el_ultimo_saldo_es_el_stock(self):
+        datos = self.kardex().json()
+        self.assertEqual(datos['insumo'], {'id': self.tomate.id, 'nombre': 'Tomate', 'unidad_medida': 'kg',
+                                           'stock_actual': '2.000'})
+        filas = datos['movimientos']
+        self.assertEqual([f['tipo'] for f in filas], ['AJUSTE', 'INGRESO', 'CONSUMO', 'MERMA'])
+        self.assertEqual(Decimal(filas[-1]['saldo']), self.tomate.stock_actual)
+
+    def test_la_cantidad_va_en_entrada_o_en_salida(self):
+        filas = self.kardex().json()['movimientos']
+        self.assertEqual([(f['entrada'], f['salida']) for f in filas],
+                         [(None, '1.000'), ('3.500', None), (None, '0.200'), (None, '0.300')])
+
+    def test_cada_movimiento_trae_su_origen_y_quien_lo_hizo(self):
+        ajuste, ingreso, consumo, merma = self.kardex().json()['movimientos']
+        self.assertIsNone(ajuste['origen'])
+        self.assertIsNone(ajuste['empleado'])
+        self.assertEqual(ingreso['origen'], {'proveedor': 'Mercado Central', 'lote': 'L-7', 'costo_total': '21.00'})
+        self.assertEqual(ingreso['empleado'], 'almacen@test.com')
+        self.assertEqual(consumo['origen'], {'pedido_id': 77, 'platillo': 'Lomo saltado'})
+        self.assertEqual(merma['origen'], {'motivo': 'Vencido'})
+
+    def test_no_hace_una_consulta_por_movimiento(self):
+        self.con_token(token_como_spring(self.admin_central))
+        with self.assertNumQueries(6):  # empleado del token, insumo, movimientos y los 3 orígenes
+            self.client.get(self.url())
+
+    def test_filtra_por_fecha_con_los_dos_extremos_incluidos(self):
+        tipos = lambda **f: [m['tipo'] for m in self.kardex(**f).json()['movimientos']]
+        self.assertEqual(tipos(desde=self.dia(5)), ['INGRESO', 'CONSUMO', 'MERMA'])
+        self.assertEqual(tipos(hasta=self.dia(3)), ['AJUSTE', 'INGRESO', 'CONSUMO'])
+        self.assertEqual(tipos(desde=self.dia(5), hasta=self.dia(3)), ['INGRESO', 'CONSUMO'])
+        self.assertEqual(tipos(desde=self.dia(3), hasta=self.dia(3)), ['CONSUMO'])
+
+    def test_rango_sin_movimientos_responde_lista_vacia(self):
+        respuesta = self.kardex(hasta=self.dia(30))
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.json()['movimientos'], [])
+
+    def test_fechas_invalidas_responden_400(self):
+        self.assertEqual(self.kardex(desde='31/10/2026').status_code, 400)
+        self.assertEqual(self.kardex(hasta='2026-13-40').status_code, 400)
+        self.assertEqual(self.kardex(desde=self.dia(1), hasta=self.dia(5)).status_code, 400)
+
+    def test_insumo_de_otro_restaurante_responde_404(self):
+        self.con_token(token_como_spring(self.admin_central))
+        self.assertEqual(self.client.get(self.url(self.pollo_norte)).status_code, 404)
+
+    def test_almacenero_lo_ve_y_cocina_recibe_403(self):
+        self.assertEqual(self.kardex(self.almacenero_central).status_code, 200)
+        self.assertEqual(self.kardex(self.cocinero_central).status_code, 403)
+
+    def test_sin_token_responde_401(self):
+        self.assertEqual(self.client.get(self.url()).status_code, 401)

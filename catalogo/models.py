@@ -231,6 +231,59 @@ class RegistroIngresoProveedor(models.Model):
         return f'{self.ingrediente.nombre} - lote {self.lote or "s/n"}'
 
 
+class MotivoMerma(models.Model):
+    """HU-17: motivo de una merma. Por ahora solo se lee (HU-15 lo muestra en el kardex)."""
+
+    id = models.AutoField(primary_key=True)
+    restaurante = models.ForeignKey(
+        Restaurante,
+        on_delete=models.PROTECT,
+        db_column='restaurante_id',
+        null=True,
+        blank=True,
+        related_name='+'
+    )  # NULL = motivo global
+    nombre = models.CharField(max_length=50)
+    es_global = models.BooleanField(default=False)
+
+    class Meta:
+        managed = False
+        db_table = 'motivo_merma'
+
+    def __str__(self):
+        return self.nombre
+
+
+class RegistroMerma(models.Model):
+    """HU-17 registra las mermas (Spring). HU-15 solo lee el motivo."""
+
+    id = models.AutoField(primary_key=True)
+    empleado = models.ForeignKey(Empleado, on_delete=models.PROTECT, db_column='empleado_id', related_name='+')
+    ingrediente = models.ForeignKey(Ingrediente, on_delete=models.PROTECT, db_column='ingrediente_id',
+                                    related_name='+')
+    cantidad = models.DecimalField(max_digits=10, decimal_places=3)
+    motivo = models.ForeignKey(MotivoMerma, on_delete=models.PROTECT, db_column='motivo_id', related_name='+')
+    fecha_registro = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = 'registro_merma'
+
+
+class PedidoDetalle(models.Model):
+    """Platillo de un pedido (lo escribe Spring). HU-15 solo lee a qué pedido y platillo corresponde un consumo."""
+
+    id = models.BigAutoField(primary_key=True)
+    pedido_id = models.BigIntegerField()
+    producto = models.ForeignKey(Producto, on_delete=models.PROTECT, db_column='producto_id', related_name='+')
+    cantidad = models.IntegerField()
+    estado = models.CharField(max_length=20)
+
+    class Meta:
+        managed = False
+        db_table = 'pedido_detalle'
+
+
 class MovimientoInventario(models.Model):
     """
     Sprint 3 (migración 005): cada cambio de stock de un insumo, con la cantidad (+ entra, - sale)
