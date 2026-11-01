@@ -18,6 +18,8 @@ class IngredienteAdmin(admin.ModelAdmin):
     list_filter = ('restaurante', 'tipo_control')
     search_fields = ('nombre',)
     list_select_related = ('restaurante',)
+    # El stock solo lo cambia InventarioService de Spring, que deja el movimiento del kardex (revisión del #15)
+    readonly_fields = ('stock_actual',)
 
 
 @admin.register(Restaurante)
