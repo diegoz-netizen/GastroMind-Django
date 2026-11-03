@@ -50,6 +50,27 @@ curl http://localhost:8000/api/catalogo/insumos/ -H "Authorization: Bearer <toke
 
 **Admin de Django** (`/admin/`): necesita las tablas propias de Django (`auth_*`, `django_*`). Se crean en la BD compartida con `python manage.py migrate` y después `python manage.py createsuperuser`. Las migraciones de `catalogo` **no tocan** las tablas de Spring (todas sus tablas son `managed = False`).
 
+## Frontend en React (`frontend/`)
+
+Interfaz del módulo de administración hecha con React + Vite, dentro de este mismo repositorio (laboratorios S09 y S10 de Aplicaciones Empresariales). **Todavía no consume la API:** usa datos escritos a mano en `src/datos.js` con la misma forma que `GET /api/catalogo/productos/` (los decimales como texto). La conexión con la API va en la Semana 12.
+
+```bash
+cd frontend
+npm install     # solo la primera vez
+npm run dev     # http://localhost:5173
+npm run lint && npm run build
+```
+
+| Componente (`src/components`) | Qué hace | Lo que trabaja |
+|---|---|---|
+| `Tarjeta` | Contenedor con título; lo de adentro llega como `children` | Composición (como `{% block %}` en Django) |
+| `PlatilloCard` | Un platillo: nombre, precio, categoría y estado. *Agregar al pedido* suma a un contador propio y se desactiva si el platillo está INACTIVO. Avisa si pide receta y no la tiene (HU-08) | Props desestructuradas con valor por defecto, `useState`, `onClick`, condicionales |
+| `ListaPlatillos` | La carta: buscador por nombre (sin distinguir mayúsculas) y formulario *Nuevo platillo* que lo agrega a la lista | `map` + `key`, campo controlado (`value` + `onChange`), `onSubmit` + `preventDefault`, validación (nombre obligatorio y precio > 0, como `ProductoRecetaSerializer`) |
+| `RecetaCard` | Relación 1:N: el platillo con su receta, costo, margen y % del precio (HU-08) | Un componente dentro de otro, total calculado |
+| `LineaReceta` | Un insumo de la receta: cantidad × costo unitario | Props convertidas de los nombres de la API |
+
+`node_modules` y `dist` no se suben (`frontend/.gitignore`).
+
 ## Formato de errores (HL-014)
 
 Todos los errores de la API salen igual que en Spring Boot (`config/errores.py`):

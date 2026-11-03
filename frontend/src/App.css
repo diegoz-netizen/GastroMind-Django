@@ -1,0 +1,30 @@
+.pagina { max-width: 1040px; margin: 0 auto; padding: 24px 16px; }
+h1 { color: var(--verde); margin-bottom: 4px; }
+.detalle { color: var(--gris); margin: 2px 0; font-size: 0.9rem; }
+.tarjeta { background: #fff; border: 1px solid #dfe3df; border-radius: 12px; padding: 16px; margin-top: 20px; }
+.tarjeta-titulo { margin-top: 0; font-size: 1.15rem; }
+.grilla { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+.platillo, .receta { border: 1px solid #dfe3df; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; }
+.platillo { justify-content: space-between; }
+.platillo h3, .receta h3 { margin: 0 0 4px; font-size: 1rem; }
+.platillo-inactivo { background: var(--papel); }
+.precio, .cifra { font-family: ui-monospace, monospace; font-weight: 600; }
+.estado { color: var(--verde); font-weight: 600; margin: 4px 0; }
+.estado-inactivo { color: var(--rojo); }
+.aviso { background: var(--ambar-claro); color: #7a5208; border-radius: 6px; padding: 4px 8px; font-size: 0.85rem; }
+.acciones { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
+.contador { font-size: 0.85rem; color: var(--verde); font-weight: 600; }
+button { background: var(--verde); color: #fff; border: 0; border-radius: 8px; padding: 8px 12px; cursor: pointer; white-space: nowrap; }
+button:disabled { background: #c7cdc9; cursor: not-allowed; }
+.buscador { width: 100%; box-sizing: border-box; padding: 10px; border: 1px solid #c7cdc9; border-radius: 8px; margin-bottom: 12px; }
+.vacio { color: var(--gris); font-style: italic; }
+.formulario { display: grid; gap: 8px; max-width: 420px; margin-top: 20px; }
+.formulario h3 { margin: 0; }
+.formulario label { display: grid; gap: 4px; font-size: 0.9rem; }
+.formulario input, .formulario select { padding: 8px; border: 1px solid #c7cdc9; border-radius: 8px; }
+.error { background: var(--rojo-claro); color: var(--rojo); border-radius: 6px; padding: 6px 8px; margin: 0; }
+.receta ul { list-style: none; padding: 0; margin: 0; }
+.linea { display: grid; grid-template-columns: 1fr auto; gap: 0 8px; padding: 4px 0; border-bottom: 1px dashed #dfe3df; font-size: 0.9rem; }
+.linea .detalle { grid-column: 1; font-size: 0.8rem; }
+.linea .cifra { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
+.totales { font-size: 0.85rem; margin: 8px 0 0; font-weight: 600; }

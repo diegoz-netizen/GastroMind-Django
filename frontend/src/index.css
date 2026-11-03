@@ -1,0 +1,19 @@
+/* Colores del sistema de diseño de GastroMind (prototipo del 27/10) */
+:root {
+  --verde: #1d5b47;
+  --verde-claro: #dcebe4;
+  --papel: #f3f4f1;
+  --texto: #18201c;
+  --gris: #5b6660;
+  --ambar: #c98a1e;
+  --ambar-claro: #fbf1de;
+  --rojo: #b42318;
+  --rojo-claro: #fbeae8;
+  font-family: system-ui, sans-serif;
+  color: var(--texto);
+  background: var(--papel);
+}
+
+body {
+  margin: 0;
+}
