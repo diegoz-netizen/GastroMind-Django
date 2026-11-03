@@ -25,7 +25,7 @@ function App() {
       <header className="encabezado">
         <h1>{nombreApp}: catálogo de la {sede}</h1>
         <p>
-          {insumos.length} insumos y {platillos.length} platillos · {lomo.nombre} con IGV: S/ {precioConIgv(lomo.precio)}
+          {platillos.length} platillos en la carta · {lomo.nombre} con IGV: S/ {precioConIgv(lomo.precio)}
         </p>
       </header>
 

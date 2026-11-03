@@ -30,7 +30,8 @@ function ListaInsumos({ insumos }) {
       setError('Ya existe un insumo con ese nombre en el restaurante.')
       return
     }
-    if (!(Number(form.costo_unitario) > 0) || !(Number(form.stock_minimo) > 0)) {
+    // Igual que la API: costo con 2 decimales (mínimo 0.01) y stock con 3 (mínimo 0.001)
+    if (!(Number(form.costo_unitario) >= 0.01) || !(Number(form.stock_minimo) >= 0.001)) {
       setError('El costo unitario y el stock mínimo deben ser mayores que 0.')
       return
     }
@@ -51,6 +52,7 @@ function ListaInsumos({ insumos }) {
 
   return (
     <>
+      <p className="detalle">{lista.length} insumos registrados</p>
       <input
         className="buscador"
         type="search"

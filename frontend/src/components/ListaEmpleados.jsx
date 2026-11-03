@@ -54,6 +54,7 @@ function ListaEmpleados({ empleados, restaurantes }) {
 
   return (
     <>
+      <p className="detalle">{lista.length} empleados registrados</p>
       <input
         className="buscador"
         type="search"
