@@ -3,7 +3,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from django.db import transaction
 from rest_framework import serializers
 
-from .models import Categoria, Ingrediente, Producto, RecetaDetalle
+from .models import Categoria, Ingrediente, Producto, RecetaDetalle, RegistroIngresoProveedor
 
 # Las de la tabla ingrediente (comentario de unidad_medida en script_database.sql)
 UNIDADES = ['g', 'kg', 'ml', 'l', 'unidades']
@@ -218,3 +218,37 @@ class GuardarRecetaSerializer(serializers.Serializer):
                 detalles_creados.append(detalle)
             
             return detalles_creados
+
+
+class AlertaStockSerializer(serializers.ModelSerializer):
+    """HU-16: insumo en su stock mínimo o debajo, con cuánto falta para llegar al mínimo."""
+
+    faltante = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Ingrediente
+        fields = ['id', 'nombre', 'unidad_medida', 'stock_actual', 'stock_minimo', 'faltante']
+
+    def get_faltante(self, insumo):
+        return str(insumo.stock_minimo - insumo.stock_actual)
+
+
+class AlertaVencimientoSerializer(serializers.ModelSerializer):
+    """HU-16: lote que vence en 3 días o menos (o ya vencido). dias_restantes < 0 = vencido."""
+
+    insumo = serializers.CharField(source='ingrediente.nombre')
+    unidad_medida = serializers.CharField(source='ingrediente.unidad_medida')
+    proveedor = serializers.CharField(source='proveedor.nombre')
+    dias_restantes = serializers.SerializerMethodField()
+    vencido = serializers.SerializerMethodField()
+
+    class Meta:
+        model = RegistroIngresoProveedor
+        fields = ['id', 'insumo', 'unidad_medida', 'proveedor', 'lote', 'cantidad_recibida', 'fecha_vencimiento',
+                  'dias_restantes', 'vencido']
+
+    def get_dias_restantes(self, ingreso):
+        return (ingreso.fecha_vencimiento - self.context['hoy']).days
+
+    def get_vencido(self, ingreso):
+        return ingreso.fecha_vencimiento < self.context['hoy']
