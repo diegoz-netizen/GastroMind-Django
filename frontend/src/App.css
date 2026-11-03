@@ -135,3 +135,91 @@
   color: #6b7280;
   font-size: 13px;
 }
+
+/* Laboratorio 10: estado, eventos, buscador y formularios */
+.parte {
+  margin: 32px 0 0;
+  padding-bottom: 6px;
+  border-bottom: 2px solid #1a73e8;
+  font-size: 21px;
+}
+
+.seccion > .tarjeta + .tarjeta,
+.seccion > article + article {
+  margin-top: 12px;
+}
+
+button {
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 6px;
+  background-color: #1a73e8;
+  color: #ffffff;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+button:disabled {
+  background-color: #c4c9d0;
+  cursor: not-allowed;
+}
+
+.contador {
+  color: #1a73e8;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.buscador {
+  box-sizing: border-box;
+  width: 100%;
+  margin-bottom: 10px;
+  padding: 9px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.formulario {
+  display: grid;
+  gap: 8px;
+  max-width: 420px;
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+}
+
+.formulario h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.formulario label {
+  display: grid;
+  gap: 4px;
+  font-size: 14px;
+}
+
+.formulario input,
+.formulario select {
+  padding: 7px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+}
+
+.formulario button {
+  justify-self: start;
+  padding: 8px 16px;
+  font-size: 14px;
+}
+
+.error {
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background-color: #fce8e6;
+  color: #c5221f;
+  font-size: 14px;
+}
