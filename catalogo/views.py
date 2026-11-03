@@ -14,7 +14,7 @@ from rest_framework.views import APIView
 from .models import Categoria, Ingrediente, Producto, RegistroIngresoProveedor
 from .permissions import EsAdminOAlmacenero, EsAdminOAlmaceneroParaEscribir, EsAdminParaEscribir
 from .serializers import (ROLES_QUE_VEN_COSTO_INSUMO, AlertaStockSerializer, AlertaVencimientoSerializer,
-                          CategoriaSerializer, EstadoProductoSerializer, GuardarRecetaSerializer,
+                          CategoriaSerializer, ClasificarInsumoSerializer, EstadoProductoSerializer, GuardarRecetaSerializer,
                           IngredienteSerializer, KardexMovimientoSerializer, KardexOrigenes,
                           ProductoRecetaSerializer)
 
@@ -33,6 +33,7 @@ class IngredienteViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelViewSet)
     GET  /api/catalogo/insumos/{id}/   un insumo de otro restaurante responde 404 (no se revela que existe)
     POST /api/catalogo/insumos/        HU-05: registra un insumo (CA-05). Solo ADMINISTRADOR o ALMACENERO.
     GET  /api/catalogo/insumos/{id}/kardex/?desde=&hasta=   HU-15: sus movimientos. Solo ADMINISTRADOR o ALMACENERO.
+    PATCH /api/catalogo/insumos/{id}/clasificacion/   HU-25: RECETA o LIBRE con su dotación. Solo ADMINISTRADOR.
     El costo_unitario solo lo ven el ADMINISTRADOR y el ALMACENERO (Review 2).
     """
 
@@ -61,6 +62,17 @@ class IngredienteViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelViewSet)
         except IntegrityError:
             # Dos altas del mismo nombre a la vez: la segunda choca con el UNIQUE de la tabla
             raise ValidationError({'nombre': ['Ya existe un insumo con ese nombre en el restaurante.']})
+
+    @action(detail=True, methods=['patch'], url_path='clasificacion',
+            permission_classes=[IsAuthenticated, EsAdminParaEscribir])
+    def clasificacion(self, request, pk=None):
+        insumo = self.get_object()
+        serializer = ClasificarInsumoSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        for campo, valor in serializer.validated_data.items():
+            setattr(insumo, campo, valor)
+        insumo.save(update_fields=['tipo_control', 'dotacion_cantidad', 'dotacion_periodo'])
+        return Response(self.get_serializer(insumo).data)
 
     @action(detail=True, methods=['get'], url_path='kardex', permission_classes=[IsAuthenticated, EsAdminOAlmacenero])
     def kardex(self, request, pk=None):
