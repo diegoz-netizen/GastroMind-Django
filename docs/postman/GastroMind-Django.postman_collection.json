@@ -958,6 +958,96 @@
           }
         ]
       }
+    },
+    {
+      "name": "7. Clasificar insumo (Django, HU-25)",
+      "item": [
+        {
+          "name": "LIBRE sin dotación → 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('400', () => pm.response.to.have.status(400));",
+                  "const e = pm.response.json().campos;",
+                  "pm.test('Pide dotación y periodo', () => { pm.expect(e).to.have.property('dotacion_cantidad'); pm.expect(e).to.have.property('dotacion_periodo'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tipo_control\": \"LIBRE\"\n}"
+            },
+            "url": "{{django}}/api/catalogo/insumos/{{tomateId}}/clasificacion/"
+          }
+        },
+        {
+          "name": "Pasa a LIBRE con su dotación",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.test('Queda LIBRE', () => pm.expect(pm.response.json().tipo_control).to.eql('LIBRE'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tipo_control\": \"LIBRE\",\n  \"dotacion_cantidad\": \"5\",\n  \"dotacion_periodo\": \"SEMANAL\"\n}"
+            },
+            "url": "{{django}}/api/catalogo/insumos/{{tomateId}}/clasificacion/"
+          }
+        },
+        {
+          "name": "Vuelve a RECETA y borra la dotación",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.test('Sin dotación', () => pm.expect(pm.response.json().dotacion_cantidad).to.eql(null));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tipo_control\": \"RECETA\"\n}"
+            },
+            "url": "{{django}}/api/catalogo/insumos/{{tomateId}}/clasificacion/"
+          }
+        }
+      ]
     }
   ]
 }

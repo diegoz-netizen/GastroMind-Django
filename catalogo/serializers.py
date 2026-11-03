@@ -18,6 +18,19 @@ def rol_de(context):
     return getattr(getattr(request, 'user', None), 'rol', '').upper()
 
 
+def validar_dotacion(datos):
+    # Igual que el CHECK chk_dotacion_libre: un insumo LIBRE necesita su dotación; uno de RECETA no la usa
+    if datos.get('tipo_control', 'RECETA') == 'LIBRE':
+        faltan = {campo: 'Obligatorio si tipo_control es LIBRE.'
+                  for campo in ('dotacion_cantidad', 'dotacion_periodo') if not datos.get(campo)}
+        if faltan:
+            raise serializers.ValidationError(faltan)
+    else:
+        datos['dotacion_cantidad'] = None
+        datos['dotacion_periodo'] = None
+    return datos
+
+
 class IngredienteSerializer(serializers.ModelSerializer):
     """
     HU-05. El restaurante no se expone ni se acepta del cliente: sale del token.
@@ -61,16 +74,20 @@ class IngredienteSerializer(serializers.ModelSerializer):
         return nombre
 
     def validate(self, datos):
-        # Igual que el CHECK chk_dotacion_libre: un insumo LIBRE necesita su dotación; uno de RECETA no la usa
-        if datos.get('tipo_control', 'RECETA') == 'LIBRE':
-            faltan = {campo: 'Obligatorio si tipo_control es LIBRE.'
-                      for campo in ('dotacion_cantidad', 'dotacion_periodo') if not datos.get(campo)}
-            if faltan:
-                raise serializers.ValidationError(faltan)
-        else:
-            datos['dotacion_cantidad'] = None
-            datos['dotacion_periodo'] = None
-        return datos
+        return validar_dotacion(datos)
+
+
+class ClasificarInsumoSerializer(serializers.Serializer):
+    """HU-25: RECETA se descuenta al servir; LIBRE se controla por su dotación y por conteo."""
+
+    tipo_control = serializers.ChoiceField(choices=Ingrediente.TIPO_CONTROL)
+    dotacion_cantidad = serializers.DecimalField(max_digits=10, decimal_places=3, min_value=Decimal('0.001'),
+                                                 required=False, allow_null=True,
+                                                 error_messages={'min_value': MAYOR_QUE_CERO})
+    dotacion_periodo = serializers.ChoiceField(choices=Ingrediente.DOTACION_PERIODO, required=False, allow_null=True)
+
+    def validate(self, datos):
+        return validar_dotacion(datos)
 
 
 def costo_de(producto):
