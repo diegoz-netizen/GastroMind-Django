@@ -63,7 +63,7 @@ def salidas_entre(restaurante_id, desde, hasta):
     Se valora al costo_unitario actual del insumo, que solo cambia al registrarlo (las compras no lo tocan).
     """
     inicio, fin = rango(desde, hasta)
-    costos = {'CONSUMO': CERO, 'MERMA': CERO}
+    costos = {'CONSUMO': soles(CERO), 'MERMA': soles(CERO)}
     filas = (MovimientoInventario.objects
              .filter(ingrediente__restaurante_id=restaurante_id, tipo__in=costos, fecha__gte=inicio, fecha__lt=fin)
              .values('tipo')
