@@ -9,5 +9,6 @@ router.register(r'productos', ProductoViewSet, basename='producto')
 
 urlpatterns = [
     path('alertas/', AlertasView.as_view(), name='alertas'),  # HU-16
+    path('reportes/', include('catalogo.reportes.urls')),  # Sprint 4: HU-19 a HU-24
     path('', include(router.urls)),
 ]

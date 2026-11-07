@@ -30,6 +30,15 @@ class EsAdminParaEscribir(BasePermission):
         return request.user.rol.upper() == 'ADMINISTRADOR'
 
 
+class EsAdmin(BasePermission):
+    """Sprint 4, reportes del gerente (HU-19 a HU-24): leer y escribir, solo ADMINISTRADOR."""
+
+    message = 'Se requiere rol ADMINISTRADOR.'
+
+    def has_permission(self, request, view):
+        return request.user.rol.upper() == 'ADMINISTRADOR'
+
+
 class EsAdminOAlmacenero(BasePermission):
     """
     HU-16 ("se avisa a todo el personal con el rol requerido"): las alertas de stock y vencimiento
