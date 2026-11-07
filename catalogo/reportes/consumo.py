@@ -2,8 +2,8 @@
 HU-20 (CA-20): consumo teórico contra real de cada insumo en un periodo.
 - Teórico: platillos SERVIDOS en el periodo × su receta. Solo insumos RECETA: los LIBRE no se descuentan al servir
   (HU-13) y van por dotación y conteo.
-- Real: lo que salió según el inventario (CONSUMO + MERMA). Cuando entre la HU-30 se le suma lo que falte en el
-  último conteo físico del periodo.
+- Real: lo que salió según el inventario (CONSUMO + MERMA), más lo que faltó en el último conteo físico del
+  periodo (HU-30: stock del sistema − lo contado). Si en el conteo sobró, el real baja.
 Se resaltan las diferencias mayores a 5 %.
 """
 from collections import defaultdict
@@ -14,12 +14,26 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from ..models import Ingrediente, MovimientoInventario, PedidoDetalle, RecetaDetalle
+from ..models import ConteoCiclico, Ingrediente, MovimientoInventario, PedidoDetalle, RecetaDetalle
 from ..permissions import EsAdmin
 from .comun import pedidos_entre, periodo, rango
 
 UMBRAL_DESVIACION = Decimal('5')
 TRES = Decimal('0.001')
+
+
+def faltantes_del_conteo(restaurante_id, inicio, fin):
+    """HU-30: por insumo RECETA, lo que faltó en su último conteo del periodo (negativo si sobró)."""
+    conteos = (ConteoCiclico.objects
+               .filter(ingrediente__restaurante_id=restaurante_id, ingrediente__tipo_control='RECETA',
+                       stock_sistema__isnull=False, fecha_registro__gte=inicio, fecha_registro__lt=fin)
+               .order_by('ingrediente_id', '-fecha_registro', '-id')
+               .values('ingrediente_id', 'stock_sistema', 'cantidad_fisica_contada'))
+    faltantes = {}
+    for conteo in conteos:
+        # El primero de cada insumo es el más reciente
+        faltantes.setdefault(conteo['ingrediente_id'], conteo['stock_sistema'] - conteo['cantidad_fisica_contada'])
+    return faltantes
 
 
 def teorico_vs_real(restaurante_id, desde, hasta):
@@ -38,7 +52,9 @@ def teorico_vs_real(restaurante_id, desde, hasta):
                .filter(ingrediente__restaurante_id=restaurante_id, ingrediente__tipo_control='RECETA',
                        tipo__in=('CONSUMO', 'MERMA'), fecha__gte=inicio, fecha__lt=fin)
                .values('ingrediente_id').annotate(total=Sum('cantidad')))
-    real = {s['ingrediente_id']: -s['total'] for s in salidas}
+    real = defaultdict(Decimal, {s['ingrediente_id']: -s['total'] for s in salidas})
+    for insumo_id, faltante in faltantes_del_conteo(restaurante_id, inicio, fin).items():
+        real[insumo_id] += faltante
 
     insumos = Ingrediente.objects.filter(id__in=set(teorico) | set(real), restaurante_id=restaurante_id)
     filas = []
