@@ -3,8 +3,8 @@ from decimal import ROUND_HALF_UP, Decimal
 from django.db import transaction
 from rest_framework import serializers
 
-from .models import (Categoria, Ingrediente, MovimientoInventario, PedidoDetalle, Producto, RecetaDetalle,
-                     RegistroIngresoProveedor, RegistroMerma)
+from .models import (Categoria, Ingrediente, MovimientoInventario, PedidoDetalle, Producto, Proveedor,
+                     ProveedorInsumo, RecetaDetalle, RegistroIngresoProveedor, RegistroMerma)
 
 # Las de la tabla ingrediente (comentario de unidad_medida en script_database.sql)
 UNIDADES = ['g', 'kg', 'ml', 'l', 'unidades']
@@ -321,3 +321,57 @@ class KardexMovimientoSerializer(serializers.ModelSerializer):
 
     def get_origen(self, movimiento):
         return self.context['origenes'].de(movimiento)
+
+
+class PrecioProveedorSerializer(serializers.ModelSerializer):
+    """
+    HU-22: el precio de un insumo con un proveedor, su tiempo de entrega y el flete.
+    Al guardar, si ya había un precio para ese insumo, se reemplaza (uno vigente por proveedor e insumo).
+    """
+
+    insumo_id = serializers.PrimaryKeyRelatedField(source='ingrediente', queryset=Ingrediente.objects.none())
+    insumo = serializers.CharField(source='ingrediente.nombre', read_only=True)
+    unidad = serializers.CharField(source='ingrediente.unidad_medida', read_only=True)
+    precio_unitario = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=Decimal('0.01'),
+                                               error_messages={'min_value': MAYOR_QUE_CERO})
+    tiempo_entrega_dias = serializers.IntegerField(min_value=0, max_value=365)
+    flete = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=Decimal('0'), required=False,
+                                     error_messages={'min_value': 'No puede ser negativo.'})
+
+    class Meta:
+        model = ProveedorInsumo
+        fields = ['id', 'insumo_id', 'insumo', 'unidad', 'precio_unitario', 'tiempo_entrega_dias', 'flete']
+        # El UNIQUE (proveedor, insumo) no es un error: guardar de nuevo actualiza el precio
+        validators = []
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        request = self.context.get('request')
+        if request is not None:
+            # Un insumo de otro restaurante se trata como inexistente
+            self.fields['insumo_id'].queryset = Ingrediente.objects.filter(restaurante_id=request.user.restaurante_id)
+
+
+class ProveedorSerializer(serializers.ModelSerializer):
+    """HU-22: el proveedor con sus precios (solo lectura aquí; se cargan con POST .../precios/)."""
+
+    nombre = serializers.CharField(max_length=150, trim_whitespace=True)
+    contacto = serializers.CharField(max_length=150, trim_whitespace=True, required=False, allow_blank=True,
+                                     allow_null=True)
+    precios = PrecioProveedorSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Proveedor
+        fields = ['id', 'nombre', 'contacto', 'precios']
+
+    def validate_nombre(self, nombre):
+        restaurante_id = self.context['request'].user.restaurante_id
+        repetidos = Proveedor.objects.filter(restaurante_id=restaurante_id, nombre__iexact=nombre)
+        if self.instance is not None:
+            repetidos = repetidos.exclude(id=self.instance.id)
+        if repetidos.exists():
+            raise serializers.ValidationError('Ya existe un proveedor con ese nombre en el restaurante.')
+        return nombre
+
+    def validate_contacto(self, contacto):
+        return contacto or None

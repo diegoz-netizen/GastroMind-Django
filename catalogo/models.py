@@ -180,7 +180,7 @@ class RecetaDetalle(models.Model):
 
 
 class Proveedor(models.Model):
-    """HU-22: proveedor del restaurante. Por ahora solo se lee (HU-16 muestra de quién es cada lote)."""
+    """HU-22: proveedor del restaurante. Lo registra el gerente desde la web (ProveedorViewSet)."""
 
     id = models.AutoField(primary_key=True)
     restaurante = models.ForeignKey(
@@ -198,6 +198,29 @@ class Proveedor(models.Model):
 
     def __str__(self):
         return self.nombre
+
+
+class ProveedorInsumo(models.Model):
+    """
+    HU-22: el precio vigente de un insumo con un proveedor, su tiempo de entrega y el flete (migración 008).
+    Uno por proveedor e insumo; el trigger de la BD exige que los dos sean del mismo restaurante.
+    """
+
+    id = models.BigAutoField(primary_key=True)
+    proveedor = models.ForeignKey(Proveedor, on_delete=models.PROTECT, db_column='proveedor_id', related_name='precios')
+    ingrediente = models.ForeignKey(Ingrediente, on_delete=models.PROTECT, db_column='ingrediente_id',
+                                    related_name='precios_proveedor')
+    precio_unitario = models.DecimalField(max_digits=10, decimal_places=2)
+    tiempo_entrega_dias = models.IntegerField()
+    flete = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+
+    class Meta:
+        managed = False
+        db_table = 'proveedor_insumo'
+        unique_together = [('proveedor', 'ingrediente')]
+
+    def __str__(self):
+        return f'{self.proveedor} · {self.ingrediente}'
 
 
 class RegistroIngresoProveedor(models.Model):

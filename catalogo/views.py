@@ -1,7 +1,8 @@
 from datetime import datetime, time, timedelta
+from decimal import Decimal
 
 from django.db import IntegrityError, transaction
-from django.db.models import F, Q
+from django.db.models import F, Prefetch, Q
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 from rest_framework import filters, mixins, status, viewsets
@@ -11,12 +12,12 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Categoria, Ingrediente, Producto, RegistroIngresoProveedor
-from .permissions import EsAdminOAlmacenero, EsAdminOAlmaceneroParaEscribir, EsAdminParaEscribir
+from .models import Categoria, Ingrediente, Producto, Proveedor, ProveedorInsumo, RegistroIngresoProveedor
+from .permissions import EsAdmin, EsAdminOAlmacenero, EsAdminOAlmaceneroParaEscribir, EsAdminParaEscribir
 from .serializers import (ROLES_QUE_VEN_COSTO_INSUMO, AlertaStockSerializer, AlertaVencimientoSerializer,
                           CategoriaSerializer, ClasificarInsumoSerializer, EstadoProductoSerializer, GuardarRecetaSerializer,
                           IngredienteSerializer, KardexMovimientoSerializer, KardexOrigenes,
-                          ProductoRecetaSerializer)
+                          PrecioProveedorSerializer, ProductoRecetaSerializer, ProveedorSerializer)
 
 
 class Conflicto(APIException):
@@ -111,6 +112,51 @@ class IngredienteViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelViewSet)
         if fecha is None:
             raise ValidationError({nombre: ['Use el formato AAAA-MM-DD.']})
         return fecha
+
+
+class ProveedorViewSet(mixins.CreateModelMixin, mixins.UpdateModelMixin, viewsets.ReadOnlyModelViewSet):
+    """
+    HU-22 ("yo como gerente"): solo ADMINISTRADOR, también para leer.
+    GET   /api/catalogo/proveedores/              los proveedores del restaurante con sus precios (?search=)
+    POST  /api/catalogo/proveedores/              registra un proveedor {nombre, contacto}
+    PATCH /api/catalogo/proveedores/{id}/         cambia su nombre o contacto
+    POST  /api/catalogo/proveedores/{id}/precios/ {insumo_id, precio_unitario, tiempo_entrega_dias, flete}:
+          guarda el precio del insumo con ese proveedor; si ya tenía uno, lo reemplaza (201 nuevo, 200 cambiado)
+    No se borran: las compras (HU-14) quedan ligadas a su proveedor.
+    El de menor costo total para un insumo está en /api/catalogo/reportes/proveedores/ (CA-22).
+    """
+
+    serializer_class = ProveedorSerializer
+    permission_classes = [IsAuthenticated, EsAdmin]
+    http_method_names = ['get', 'post', 'patch', 'head', 'options']
+    filter_backends = [filters.SearchFilter]
+    search_fields = ['nombre']
+
+    def get_queryset(self):
+        # Multi-tenant: SIEMPRE filtrado por el restaurante del empleado autenticado
+        return (Proveedor.objects.filter(restaurante_id=self.request.user.restaurante_id)
+                .prefetch_related(Prefetch('precios', queryset=ProveedorInsumo.objects.select_related('ingrediente')
+                                           .order_by('ingrediente__nombre')))
+                .order_by('nombre'))
+
+    def perform_create(self, serializer):
+        # El restaurante sale del token (de la BD), nunca del body
+        serializer.save(restaurante_id=self.request.user.restaurante_id)
+
+    @action(detail=True, methods=['post'], url_path='precios')
+    def precios(self, request, pk=None):
+        proveedor = self.get_object()
+        entrada = PrecioProveedorSerializer(data=request.data, context=self.get_serializer_context())
+        entrada.is_valid(raise_exception=True)
+        datos = entrada.validated_data
+        with transaction.atomic():
+            precio, creado = ProveedorInsumo.objects.update_or_create(
+                proveedor=proveedor, ingrediente=datos['ingrediente'],
+                defaults={'precio_unitario': datos['precio_unitario'],
+                          'tiempo_entrega_dias': datos['tiempo_entrega_dias'],
+                          'flete': datos.get('flete', Decimal('0'))})
+        return Response(PrecioProveedorSerializer(precio).data,
+                        status=status.HTTP_201_CREATED if creado else status.HTTP_200_OK)
 
 
 class CategoriaViewSet(viewsets.ModelViewSet):
