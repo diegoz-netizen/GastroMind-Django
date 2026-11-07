@@ -1,5 +1,8 @@
-from django.urls import path  # noqa: F401  (cada HU de reportes suma aquí su ruta)
+from django.urls import path
+
+from .panel import PanelView
 
 # /api/catalogo/reportes/...  Solo ADMINISTRADOR (permissions.EsAdmin)
 urlpatterns = [
+    path('panel/', PanelView.as_view(), name='reporte-panel'),  # HU-23
 ]
