@@ -312,6 +312,25 @@ class PedidoDetalle(models.Model):
         db_table = 'pedido_detalle'
 
 
+class ConteoCiclico(models.Model):
+    """
+    HU-30: un conteo físico (lo registra Spring). stock_sistema es el stock que tenía el sistema al contar
+    (migración 009). Django lo lee para el consumo real de la HU-20.
+    """
+
+    id = models.BigAutoField(primary_key=True)
+    empleado = models.ForeignKey(Empleado, on_delete=models.PROTECT, db_column='empleado_id', related_name='+')
+    ingrediente = models.ForeignKey(Ingrediente, on_delete=models.PROTECT, db_column='ingrediente_id',
+                                    related_name='conteos')
+    cantidad_fisica_contada = models.DecimalField(max_digits=10, decimal_places=3)
+    stock_sistema = models.DecimalField(max_digits=10, decimal_places=3, null=True, blank=True)
+    fecha_registro = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = 'conteo_ciclico'
+
+
 class MovimientoInventario(models.Model):
     """
     Sprint 3 (migración 005): cada cambio de stock de un insumo, con la cantidad (+ entra, - sale)
