@@ -8,7 +8,7 @@ Los empleados son de solo lectura aquí: se gestionan en Spring Boot (HU-01, HU-
 
 from django.contrib import admin
 
-from .models import Empleado, Ingrediente, Restaurante, Rol
+from .models import Empleado, Ingrediente, Proveedor, ProveedorInsumo, Restaurante, Rol
 
 
 @admin.register(Ingrediente)
@@ -58,4 +58,28 @@ class RolAdmin(admin.ModelAdmin):
         return False
 
     def has_delete_permission(self, request, obj=None):
+        return False
+
+
+class ProveedorInsumoInline(admin.TabularInline):
+    """HU-22: los precios del proveedor, editables en la misma página (Inline, S05)."""
+
+    model = ProveedorInsumo
+    extra = 0
+    fields = ('ingrediente', 'precio_unitario', 'tiempo_entrega_dias', 'flete')
+    autocomplete_fields = ('ingrediente',)
+
+
+@admin.register(Proveedor)
+class ProveedorAdmin(admin.ModelAdmin):
+    """HU-22: el trigger de la BD rechaza un precio con un insumo de otro restaurante."""
+
+    list_display = ('nombre', 'restaurante', 'contacto')
+    list_filter = ('restaurante',)
+    search_fields = ('nombre', 'contacto')
+    list_select_related = ('restaurante',)
+    inlines = [ProveedorInsumoInline]
+
+    def has_delete_permission(self, request, obj=None):
+        # Las compras (HU-14) quedan ligadas a su proveedor
         return False
