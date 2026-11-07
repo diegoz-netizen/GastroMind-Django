@@ -77,6 +77,8 @@ python manage.py test --settings=config.settings_test
 
 Usan SQLite en memoria (no necesitan PostgreSQL ni `.env`). Los tokens de prueba se arman igual que los emite Spring.
 
+Los reportes tienen un test por HU (`catalogo/test_reportes_<tema>.py`) sobre la misma base de datos de prueba (`test_reportes_base.py`: restaurante, insumos, pedidos servidos y movimientos con fecha fija).
+
 ## Qué hay
 
 | Pieza | Archivo | Tema del curso |
@@ -90,10 +92,15 @@ Usan SQLite en memoria (no necesitan PostgreSQL ni `.env`). Los tokens de prueba
 | **HU-25** `PATCH /api/catalogo/insumos/{id}/clasificacion/`: `RECETA` o `LIBRE`; `LIBRE` exige cantidad y periodo de dotación, y `RECETA` la borra. Solo `ADMINISTRADOR` (403 al resto). No toca stock ni costo. El conteo cíclico va con la HU-30 | `catalogo/serializers.py`, `views.py` | S4 |
 | **HU-07** carta: `GET/POST /api/catalogo/productos/` (`?estado=ACTIVO` = los que salen en la toma de pedidos), `PUT/PATCH /{id}/` edita nombre, precio (> 0), categoría y receta sí/no, `PATCH /{id}/estado/` activa o desactiva. Sin `DELETE` (405): un platillo desactivado se conserva en el historial (CA-07). Escribe solo `ADMINISTRADOR` | `catalogo/views.py`, `serializers.py`, `models.py` | S07–S08 |
 | **HU-08** costo del platillo: cada platillo de `/api/catalogo/productos/` trae `costo` (Σ cantidad de la receta × costo unitario del insumo, redondeado al final a 2 decimales), `margen` (precio − costo) y `porcentaje_costo` (% del precio que se va en insumos). Se calculan al vuelo, no se guardan: cambian al cambiar la receta o el costo de un insumo (CA-08). Sin receta → costo 0 | `catalogo/serializers.py` (`costo_de`), `views.py` | S07–S08 |
+| **Reportes del gerente (base):** todo cuelga de `/api/catalogo/reportes/` y es solo para `ADMINISTRADOR` (403 al resto). Cada reporte acepta `?desde=` y `?hasta=` (AAAA-MM-DD, días de Perú, los dos incluidos); sin ellos va del 1 del mes en curso a hoy. Ventas = platillos `SERVIDO`; costo y merma = salidas `CONSUMO` y `MERMA` del inventario, valorizadas | `catalogo/reportes/comun.py`, `urls.py`, `catalogo/permissions.py` (`EsAdmin`) | S4 |
+| **HU-20** `GET reportes/consumo/`: por insumo `RECETA`, consumo teórico (platillos servidos × receta) contra real (`CONSUMO` + `MERMA`, más lo que faltó en el último conteo físico del periodo, HU-30). Trae diferencia y %, y marca `resaltar` si se desvía más de 5 %. Los insumos `LIBRE` no entran: van por dotación y conteo | `catalogo/reportes/consumo.py` | S4 |
+| **HU-23** `GET reportes/panel/`: ventas, costo de insumos, merma y margen bruto del periodo, en soles y en % de las ventas, contra el periodo anterior del mismo largo. Trae también las ventas y el costo por semana y los 5 platillos más vendidos con su % de costo | `catalogo/reportes/panel.py` | S4 |
 
 ## Estado
 
 Base creada el 12/10/2026 (Sprint 2). El catálogo (HU-05 a 08) va en Django (decidido el 13/10). HU-05: consulta y alta de insumos; editar y borrar no entran en este sprint.
+
+**Sprint 4 (desde el 6/11): reportes del gerente.** Van en el paquete `catalogo/reportes/`, un archivo por HU (HU-19 a HU-24), para que dos HU no choquen al mergear. Cada una suma su ruta en `catalogo/reportes/urls.py` y su pestaña en la web (`web-react/src/components/reportes/` del repo GastroMind). El reporte de la HU-20 suma los conteos físicos (HU-30): necesita la migración `009` del repo GastroMind en la BD.
 
 ## Flujo de trabajo
 
