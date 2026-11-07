@@ -62,9 +62,10 @@ def teorico_vs_real(restaurante_id, desde, hasta):
         t = teorico.get(insumo.id, Decimal('0'))
         r = real.get(insumo.id, Decimal('0'))
         diferencia = r - t
-        # Sin teórico no hay base para el %: si igual salió algo (una merma), se resalta
+        # Sin teórico no hay base para el %: si igual se movió algo (una merma, o lo que faltó o sobró en el
+        # conteo), se resalta
         porcentaje = (diferencia * 100 / t).quantize(Decimal('0.1')) if t else None
-        resaltar = abs(porcentaje) > UMBRAL_DESVIACION if porcentaje is not None else r > 0
+        resaltar = abs(porcentaje) > UMBRAL_DESVIACION if porcentaje is not None else r != 0
         filas.append({'id': insumo.id, 'insumo': insumo.nombre, 'unidad': insumo.unidad_medida,
                       'teorico': str(t.quantize(TRES)), 'real': str(r.quantize(TRES)),
                       'diferencia': str(diferencia.quantize(TRES)),
