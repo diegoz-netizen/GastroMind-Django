@@ -1009,3 +1009,71 @@ class KardexTest(BaseCatalogoTest):
 
     def test_sin_token_responde_401(self):
         self.assertEqual(self.client.get(self.url()).status_code, 401)
+
+
+class ClasificarInsumoTest(BaseCatalogoTest):
+    """HU-25: PATCH /api/catalogo/insumos/{id}/clasificacion/, solo el ADMINISTRADOR."""
+
+    LIBRE = {'tipo_control': 'LIBRE', 'dotacion_cantidad': '5', 'dotacion_periodo': 'SEMANAL'}
+
+    def setUp(self):
+        super().setUp()
+        self.con_token(token_como_spring(self.admin_central))
+
+    def clasificar(self, insumo=None, **datos):
+        return self.client.patch(f'{URL}{(insumo or self.arroz).id}/clasificacion/', datos, format='json')
+
+    def test_pasa_a_libre_con_su_dotacion(self):
+        respuesta = self.clasificar(**self.LIBRE)
+        self.assertEqual(respuesta.status_code, 200, respuesta.content)
+        self.assertEqual(respuesta.json()['tipo_control'], 'LIBRE')
+        self.arroz.refresh_from_db()
+        self.assertEqual(self.arroz.tipo_control, 'LIBRE')
+        self.assertEqual(self.arroz.dotacion_cantidad, Decimal('5'))
+        self.assertEqual(self.arroz.dotacion_periodo, 'SEMANAL')
+
+    def test_libre_sin_dotacion_responde_400_y_no_cambia_nada(self):
+        respuesta = self.clasificar(tipo_control='LIBRE')
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertEqual(set(respuesta.json()['campos']), {'dotacion_cantidad', 'dotacion_periodo'})
+        self.arroz.refresh_from_db()
+        self.assertEqual(self.arroz.tipo_control, 'RECETA')
+
+    def test_dotacion_en_cero_responde_400(self):
+        respuesta = self.clasificar(**{**self.LIBRE, 'dotacion_cantidad': '0'})
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn('dotacion_cantidad', respuesta.json()['campos'])
+
+    def test_periodo_o_tipo_que_no_existen_responden_400(self):
+        self.assertEqual(self.clasificar(**{**self.LIBRE, 'dotacion_periodo': 'DIARIA'}).status_code, 400)
+        self.assertEqual(self.clasificar(tipo_control='OTRO').status_code, 400)
+        self.assertEqual(self.clasificar().status_code, 400)
+
+    def test_volver_a_receta_borra_la_dotacion(self):
+        self.clasificar(**self.LIBRE)
+        respuesta = self.clasificar(tipo_control='RECETA', dotacion_cantidad='5', dotacion_periodo='SEMANAL')
+        self.assertEqual(respuesta.status_code, 200)
+        self.arroz.refresh_from_db()
+        self.assertEqual(self.arroz.tipo_control, 'RECETA')
+        self.assertIsNone(self.arroz.dotacion_cantidad)
+        self.assertIsNone(self.arroz.dotacion_periodo)
+
+    def test_no_toca_el_stock_ni_el_costo(self):
+        self.clasificar(**self.LIBRE, stock_actual='999', costo_unitario='1')
+        self.arroz.refresh_from_db()
+        self.assertEqual(self.arroz.stock_actual, Decimal('20'))
+        self.assertEqual(self.arroz.costo_unitario, Decimal('10.00'))
+
+    def test_solo_el_administrador_clasifica(self):
+        for empleado in (self.almacenero_central, self.cocinero_central):
+            self.con_token(token_como_spring(empleado))
+            self.assertEqual(self.clasificar(**self.LIBRE).status_code, 403)
+        self.arroz.refresh_from_db()
+        self.assertEqual(self.arroz.tipo_control, 'RECETA')
+
+    def test_insumo_de_otro_restaurante_responde_404(self):
+        self.assertEqual(self.clasificar(self.pollo_norte, **self.LIBRE).status_code, 404)
+
+    def test_sin_token_responde_401(self):
+        self.client.credentials()
+        self.assertEqual(self.clasificar(**self.LIBRE).status_code, 401)
