@@ -60,3 +60,11 @@ class ConteoEnConsumoRealTest(BaseReportesTest):
         arroz = next(f for f in filas if f['insumo'] == 'Arroz')
         self.assertEqual((arroz['teorico'], arroz['real'], arroz['porcentaje']), ('0.000', '5.000', None))
         self.assertTrue(arroz['resaltar'])
+
+    def test_un_insumo_solo_con_sobrante_en_el_conteo_tambien_aparece_resaltado(self):
+        # Revisión de Victor (#24): sin teórico y con el real negativo, antes salía sin resaltar
+        self.contar('22.000', '20.000', a_las(DIA), insumo=self.arroz)
+        filas = self.client.get(URL, {'desde': DIA.isoformat(), 'hasta': DIA.isoformat()}).json()['filas']
+        arroz = next(f for f in filas if f['insumo'] == 'Arroz')
+        self.assertEqual((arroz['teorico'], arroz['real'], arroz['porcentaje']), ('0.000', '-2.000', None))
+        self.assertTrue(arroz['resaltar'])
