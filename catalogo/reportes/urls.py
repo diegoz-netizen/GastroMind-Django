@@ -1,5 +1,8 @@
-from django.urls import path  # noqa: F401  (cada HU de reportes suma aquí su ruta)
+from django.urls import path
+
+from .consumo import ConsumoTeoricoRealView
 
 # /api/catalogo/reportes/...  Solo ADMINISTRADOR (permissions.EsAdmin)
 urlpatterns = [
+    path('consumo/', ConsumoTeoricoRealView.as_view(), name='reporte-consumo'),  # HU-20
 ]
