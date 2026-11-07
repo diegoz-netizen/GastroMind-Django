@@ -270,6 +270,34 @@ class RegistroMerma(models.Model):
         db_table = 'registro_merma'
 
 
+class Mesa(models.Model):
+    """Mesa del salón (la escribe Spring). Los reportes solo la leen para saber de qué restaurante es un pedido."""
+
+    id = models.BigAutoField(primary_key=True)
+    restaurante = models.ForeignKey(Restaurante, on_delete=models.PROTECT, db_column='restaurante_id',
+                                    related_name='+')
+    numero = models.IntegerField()
+    estado = models.CharField(max_length=20)
+
+    class Meta:
+        managed = False
+        db_table = 'mesa'
+
+
+class Pedido(models.Model):
+    """Pedido de una mesa (lo escribe Spring). Los reportes leen su fecha y su mesa."""
+
+    id = models.BigAutoField(primary_key=True)
+    mesa = models.ForeignKey(Mesa, on_delete=models.PROTECT, db_column='mesa_id', related_name='+')
+    empleado = models.ForeignKey(Empleado, on_delete=models.PROTECT, db_column='empleado_id', related_name='+')
+    estado = models.CharField(max_length=20)
+    fecha_registro = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = 'pedido'
+
+
 class PedidoDetalle(models.Model):
     """Platillo de un pedido (lo escribe Spring). HU-15 solo lee a qué pedido y platillo corresponde un consumo."""
 
