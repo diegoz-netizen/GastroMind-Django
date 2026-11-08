@@ -1,6 +1,7 @@
 from django.urls import path
 
 from .consumo import ConsumoTeoricoRealView
+from .exportar import ExportarView
 from .merma import MermaView
 from .panel import PanelView
 from .proveedores import CompararProveedoresView
@@ -13,4 +14,5 @@ urlpatterns = [
     path('merma/', MermaView.as_view(), name='reporte-merma'),  # HU-19
     path('proveedores/', CompararProveedoresView.as_view(), name='reporte-proveedores'),  # HU-22
     path('sugerencia/', SugerenciaCompraView.as_view(), name='reporte-sugerencia'),  # HU-21
+    path('exportar/', ExportarView.as_view(), name='reporte-exportar'),  # HU-24
 ]
