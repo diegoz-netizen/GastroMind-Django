@@ -50,6 +50,21 @@ curl http://localhost:8000/api/catalogo/insumos/ -H "Authorization: Bearer <toke
 
 **Admin de Django** (`/admin/`): necesita las tablas propias de Django (`auth_*`, `django_*`). Se crean en la BD compartida con `python manage.py migrate` y después `python manage.py createsuperuser`. Las migraciones de `catalogo` **no tocan** las tablas de Spring (todas sus tablas son `managed = False`).
 
+## Despliegue
+
+Este repo trae su `Dockerfile` (Python 3.12, servidor de desarrollo en el puerto 8000). **No se despliega solo:** necesita la base PostgreSQL y el mismo `JWT_SECRET` que Spring, así que se levanta junto con los demás servicios desde el `docker-compose.yml` del repo de Spring:
+
+```bash
+# con este repo clonado al lado de GastroMind-SpringBoot
+cd ../GastroMind-SpringBoot
+cp .env.example .env        # completar DB_PASSWORD, JWT_SECRET y DJANGO_SECRET_KEY
+docker compose up --build -d
+```
+
+Guía completa (variables, comprobación y problemas comunes): [`docs/DESPLIEGUE.md`](https://github.com/diegoz-netizen/GastroMind-SpringBoot/blob/main/docs/DESPLIEGUE.md) del repo de Spring.
+
+Variables que lee este servicio (están en `.env.example`): `DJANGO_SECRET_KEY`, `DJANGO_DEBUG`, `DJANGO_ALLOWED_HOSTS`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT`, `JWT_SECRET` y `CORS_ALLOWED_ORIGINS`.
+
 ## Formato de errores (HL-014)
 
 Todos los errores de la API salen igual que en Spring Boot (`config/errores.py`):
