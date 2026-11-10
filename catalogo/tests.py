@@ -885,6 +885,45 @@ class AlertasTest(BaseCatalogoTest):
         self.assertEqual(self.client.get(URL_ALERTAS).status_code, 401)
 
 
+URL_STOCK_BAJO = '/api/catalogo/insumos/stock-bajo/'
+
+
+class StockBajoTest(BaseCatalogoTest):
+    """Lab 08: @action(detail=False) que reutiliza IngredienteQuerySet.bajo_stock_minimo()."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.sal = Ingrediente.objects.create(restaurante=cls.central, nombre='Sal', unidad_medida='kg',
+                                             stock_actual=Decimal('5'), stock_minimo=Decimal('5'),
+                                             costo_unitario=Decimal('1.00'))
+
+    def stock_bajo(self, empleado=None, params=''):
+        self.con_token(token_como_spring(empleado or self.admin_central))
+        return self.client.get(URL_STOCK_BAJO + params)
+
+    def test_queryset_trae_el_minimo_exacto_y_lo_de_abajo(self):
+        nombres = Ingrediente.objects.del_restaurante(self.central.id).bajo_stock_minimo().values_list('nombre', flat=True)
+        self.assertEqual(list(nombres), ['Sal', 'Tomate'])  # Arroz 20/5 no
+
+    def test_solo_del_restaurante_del_token(self):
+        self.assertEqual([i['nombre'] for i in self.stock_bajo().json()], ['Sal', 'Tomate'])
+        Ingrediente.objects.filter(pk=self.pollo_norte.pk).update(stock_actual=Decimal('1'))
+        self.assertEqual([i['nombre'] for i in self.stock_bajo(self.admin_norte).json()], ['Pollo'])
+
+    def test_combina_search_y_ordering(self):
+        datos = self.stock_bajo(params='?search=a&ordering=-stock_actual').json()
+        self.assertEqual([i['nombre'] for i in datos], ['Sal', 'Tomate'])  # 5 antes que 2
+        datos = self.stock_bajo(params='?search=tom&ordering=nombre').json()
+        self.assertEqual([i['nombre'] for i in datos], ['Tomate'])
+
+    def test_almacenero_200_cocina_403_sin_token_401(self):
+        self.assertEqual(self.stock_bajo(self.almacenero_central).status_code, 200)
+        self.assertEqual(self.stock_bajo(self.cocinero_central).status_code, 403)
+        self.client.credentials()
+        self.assertEqual(self.client.get(URL_STOCK_BAJO).status_code, 401)
+
+
 class MovimientoInventarioTest(BaseCatalogoTest):
     """Sprint 3: Django lee el kardex que escribe Spring (tabla movimiento_inventario)."""
 
