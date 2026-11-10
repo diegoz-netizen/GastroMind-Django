@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { productos } from './datos'
+import { platillos } from '../datos'
+import PlatilloCard from '../components/PlatilloCard'
+import Tarjeta from '../components/Tarjeta'
 import Aviso from './Aviso'
 import Buscador from './Buscador'
 import Carrito from './Carrito'
 import Catalogo from './Catalogo'
 
-// Padre de la Parte 1: guarda el carrito, el texto de búsqueda y el aviso (estado elevado),
-// los entrega a los hijos por props y recibe sus avisos con funciones.
 function Practica() {
   const [carrito, setCarrito] = useState([])
   const [busqueda, setBusqueda] = useState('')
@@ -16,11 +17,9 @@ function Practica() {
     console.log('Agregar:', producto.nombre)
     const yaEsta = carrito.some((linea) => linea.id === producto.id)
     if (yaEsta) {
-      // Arreglo nuevo con map(): solo cambia la línea de ese producto
       setCarrito(carrito.map((linea) =>
         linea.id === producto.id ? { ...linea, cantidad: linea.cantidad + 1 } : linea))
     } else {
-      // Arreglo nuevo con spread (sin push)
       setCarrito([...carrito, { id: producto.id, nombre: producto.nombre, precio: producto.precio, cantidad: 1 }])
     }
     setAviso(`Agregado: ${producto.nombre}`)
@@ -34,13 +33,28 @@ function Practica() {
     setCarrito([])
   }
 
-  // Lo que se entrega al catálogo depende de la búsqueda (sin estado nuevo)
   const texto = busqueda.trim().toLowerCase()
   const visibles = productos.filter((producto) => producto.nombre.toLowerCase().includes(texto))
 
   return (
     <section className="seccion">
       <h2>Parte 1: mini catálogo con carrito</h2>
+
+      {/* Ejercicio 1 con los componentes del Lab 10: Practica (padre) → Tarjeta → PlatilloCard → LineaReceta */}
+      <Tarjeta titulo="Ejercicio 1: platillos de la carta (componentes del Lab 10)">
+        <div className="platillos">
+          {platillos.map((platillo) => (
+            <PlatilloCard
+              key={platillo.id}
+              nombre={platillo.nombre}
+              categoria={platillo.categoria_nombre}
+              precio={platillo.precio}
+              lineas={platillo.detalles_receta}
+            />
+          ))}
+        </div>
+      </Tarjeta>
+
       {aviso && <Aviso mensaje={aviso} onCerrar={setAviso} />}
       <div className="practica">
         <div>
