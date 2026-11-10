@@ -15,8 +15,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from ..models import Ingrediente, MotivoMerma, MovimientoInventario, RegistroMerma
-from ..permissions import EsAdmin
+from catalogo.models import Ingrediente, MotivoMerma, MovimientoInventario, RegistroMerma
+from catalogo.permissions import EsAdmin
 from .comun import CERO, periodo, rango, soles
 
 TRES = Decimal('0.001')

@@ -51,20 +51,20 @@ export const platillos = [
 // ---------- PARTE 2: personal (modelos Restaurante y Empleado, registrados en el Admin de Django) ----------
 
 export const restaurantes = [
-  { id: 1, nombre: 'GastroMind Demo - Sede Central' },
-  { id: 2, nombre: 'GastroMind Demo - Sede Norte' },
+  { id: 1, nombre: 'Sede Central' },
+  { id: 2, nombre: 'Sede Norte' },
 ]
 
 // Como GET /api/empleados (Spring Boot, HU-01 y HU-03)
 export const empleados = [
-  { id: 1, nombreCompleto: 'Administrador Sede Central', rol: 'ADMINISTRADOR', estado: 'ACTIVO',
-    correo: 'admin.central@gastromind.demo', restauranteId: 1 },
-  { id: 3, nombreCompleto: 'Mozo Demo', rol: 'MOZO', estado: 'ACTIVO',
-    correo: 'mozo.demo@gastromind.demo', restauranteId: 1 },
-  { id: 4, nombreCompleto: 'Cocinero Demo', rol: 'COCINERO', estado: 'INACTIVO',
-    correo: 'cocina.demo@gastromind.demo', restauranteId: 1 },
-  { id: 5, nombreCompleto: 'Almacenero Demo', rol: 'ALMACENERO', estado: 'ACTIVO',
-    correo: 'almacen.demo@gastromind.demo', restauranteId: 1 },
-  { id: 2, nombreCompleto: 'Administrador Sede Norte', rol: 'ADMINISTRADOR', estado: 'ACTIVO',
-    correo: 'admin.norte@gastromind.demo', restauranteId: 2 },
+  { id: 1, nombreCompleto: 'Lucía Fernández', rol: 'ADMINISTRADOR', estado: 'ACTIVO',
+    correo: 'lucia.fernandez@gastromind.pe', restauranteId: 1 },
+  { id: 3, nombreCompleto: 'Jorge Quispe', rol: 'MOZO', estado: 'ACTIVO',
+    correo: 'jorge.quispe@gastromind.pe', restauranteId: 1 },
+  { id: 4, nombreCompleto: 'Rosa Huamán', rol: 'COCINERO', estado: 'INACTIVO',
+    correo: 'rosa.huaman@gastromind.pe', restauranteId: 1 },
+  { id: 5, nombreCompleto: 'Miguel Torres', rol: 'ALMACENERO', estado: 'ACTIVO',
+    correo: 'miguel.torres@gastromind.pe', restauranteId: 1 },
+  { id: 2, nombreCompleto: 'Andrea Salazar', rol: 'ADMINISTRADOR', estado: 'ACTIVO',
+    correo: 'andrea.salazar@gastromind.pe', restauranteId: 2 },
 ]

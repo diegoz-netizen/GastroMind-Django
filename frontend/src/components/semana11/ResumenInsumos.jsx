@@ -13,12 +13,23 @@ function ResumenInsumos({ insumos }) {
   }, [bajoMinimo])
 
   return (
-    <div className="resumen">
-      <h3>Resumen del almacén</h3>
-      <p>Insumos registrados: {insumos.length}</p>
-      <p>Bajo el stock mínimo: {bajoMinimo}</p>
-      <p>Agotados: {agotados}</p>
-      <p>Valor del stock: S/ {valorStock.toFixed(2)}</p>
+    <div className="kpis">
+      <div className="kpi">
+        <small>Insumos registrados</small>
+        <strong>{insumos.length}</strong>
+      </div>
+      <div className={bajoMinimo > 0 ? 'kpi alerta' : 'kpi'}>
+        <small>Bajo el stock mínimo</small>
+        <strong>{bajoMinimo}</strong>
+      </div>
+      <div className={agotados > 0 ? 'kpi peligro' : 'kpi'}>
+        <small>Agotados</small>
+        <strong>{agotados}</strong>
+      </div>
+      <div className="kpi">
+        <small>Valor del stock</small>
+        <strong>S/ {valorStock.toFixed(2)}</strong>
+      </div>
     </div>
   )
 }

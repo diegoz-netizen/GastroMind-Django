@@ -71,6 +71,18 @@ class Empleado(models.Model):
         return self.estado == self.ACTIVO
 
 
+class IngredienteQuerySet(models.QuerySet):
+    """Lab 08 (S07): consultas de insumos que se repiten, en un solo lugar."""
+
+    def del_restaurante(self, restaurante_id):
+        # Multi-tenant: cada restaurante solo ve sus insumos
+        return self.filter(restaurante_id=restaurante_id)
+
+    def bajo_stock_minimo(self):
+        # CA-16: el mínimo exacto ya cuenta (misma regla que la propiedad bajo_stock_minimo)
+        return self.filter(stock_actual__lte=models.F('stock_minimo'))
+
+
 class Ingrediente(models.Model):
     """HU-05: insumo del almacén. Cada insumo pertenece a UN restaurante (multi-tenant)."""
 
@@ -93,6 +105,8 @@ class Ingrediente(models.Model):
     tipo_control = models.CharField(max_length=20, choices=TIPO_CONTROL, default='RECETA')
     dotacion_cantidad = models.DecimalField(max_digits=10, decimal_places=3, null=True, blank=True)
     dotacion_periodo = models.CharField(max_length=20, choices=DOTACION_PERIODO, null=True, blank=True)
+
+    objects = IngredienteQuerySet.as_manager()
 
     class Meta:
         managed = False

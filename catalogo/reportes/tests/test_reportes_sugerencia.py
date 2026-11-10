@@ -3,10 +3,10 @@ from datetime import date
 from decimal import Decimal
 from unittest import mock
 
-from .models import Ingrediente, Proveedor, ProveedorInsumo
-from .reportes.sugerencia import factor_de_temporada, un_anio_antes
+from catalogo.models import Ingrediente, Proveedor, ProveedorInsumo
+from catalogo.reportes.sugerencia import factor_de_temporada, un_anio_antes
 from .test_reportes_base import BaseReportesTest, a_las
-from .tests import token_como_spring
+from catalogo.tests.test_catalogo import token_como_spring
 
 URL = '/api/catalogo/reportes/sugerencia/'
 # Con hoy = 7/11, el historial de 8 semanas va del 12/09 al 6/11 y lo reciente (2 semanas) del 24/10 al 6/11

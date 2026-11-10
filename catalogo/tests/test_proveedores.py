@@ -1,8 +1,8 @@
 """HU-22: proveedores con sus precios (ProveedorViewSet) y el de menor costo total (CA-22)."""
 from decimal import Decimal
 
-from .models import Proveedor, ProveedorInsumo
-from .tests import BaseCatalogoTest, token_como_spring
+from catalogo.models import Proveedor, ProveedorInsumo
+from .test_catalogo import BaseCatalogoTest, token_como_spring
 
 URL = '/api/catalogo/proveedores/'
 COMPARAR = '/api/catalogo/reportes/proveedores/'

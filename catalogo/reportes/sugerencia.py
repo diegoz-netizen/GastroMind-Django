@@ -24,8 +24,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from ..models import Ingrediente, MovimientoInventario
-from ..permissions import EsAdmin
+from catalogo.models import Ingrediente, MovimientoInventario
+from catalogo.permissions import EsAdmin
 from .comun import rango
 from .proveedores import opciones_de
 
