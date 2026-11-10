@@ -1,69 +1,36 @@
+import { useState } from 'react'
 import './App.css'
-import { empleados, insumos, platillos, restaurantes } from './datos'
-import ListaEmpleados from './components/ListaEmpleados'
-import ListaInsumos from './components/ListaInsumos'
-import PlatilloCard from './components/PlatilloCard'
-import RestauranteCard from './components/RestauranteCard'
-import Tarjeta from './components/Tarjeta'
+import Lab10 from './Lab10'
+import PanelPlatillos from './components/PanelPlatillos'
+import Practica from './practica/Practica'
 
-// Laboratorio 10: la interfaz del Laboratorio 09 reorganizada en componentes (src/components)
-// que reciben sus datos por props, con estado (useState) y eventos.
-
-const nombreApp = 'GastroMind'
-const IGV = 0.18
-
-function precioConIgv(precio) {
-  return (Number(precio) * (1 + IGV)).toFixed(2)
-}
+// Laboratorio 11: App solo elige qué pantalla se ve. Cada pantalla guarda su propio estado.
+const VISTAS = [
+  { id: 'practica', titulo: 'Parte 1: práctica (cafetería)' },
+  { id: 'panel', titulo: 'Parte 2: panel de la carta' },
+  { id: 'lab10', titulo: 'Lab 10: catálogo y personal' },
+]
 
 function App() {
-  const sede = 'Sede Central'
-  const lomo = platillos[1]
+  const [vista, setVista] = useState('practica')
 
   return (
     <main className="app">
-      <header className="encabezado">
-        <h1>{nombreApp}: catálogo de la {sede}</h1>
-        <p>
-          {platillos.length} platillos en la carta · {lomo.nombre} con IGV: S/ {precioConIgv(lomo.precio)}
-        </p>
-      </header>
-
-      <h2 className="parte">Parte 1: catálogo</h2>
-
-      <Tarjeta titulo="Insumos">
-        <ListaInsumos insumos={insumos} />
-      </Tarjeta>
-
-      <Tarjeta titulo="Platillos y su receta">
-        <div className="platillos">
-          {platillos.map((platillo) => (
-            <PlatilloCard
-              key={platillo.id}
-              nombre={platillo.nombre}
-              categoria={platillo.categoria_nombre}
-              precio={platillo.precio}
-              lineas={platillo.detalles_receta}
-            />
-          ))}
-        </div>
-      </Tarjeta>
-
-      <h2 className="parte">Parte 2: personal</h2>
-
-      <Tarjeta titulo="Empleados">
-        <ListaEmpleados empleados={empleados} restaurantes={restaurantes} />
-      </Tarjeta>
-
-      <Tarjeta titulo="Personal por restaurante">
-        {restaurantes.map((restaurante) => (
-          <RestauranteCard
-            key={restaurante.id}
-            nombre={restaurante.nombre}
-            personal={empleados.filter((empleado) => empleado.restauranteId === restaurante.id)}
-          />
+      <nav className="vistas">
+        {VISTAS.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            className={item.id === vista ? 'vista activa' : 'vista'}
+            onClick={() => setVista(item.id)}
+          >
+            {item.titulo}
+          </button>
         ))}
-      </Tarjeta>
+      </nav>
+      {vista === 'practica' && <Practica />}
+      {vista === 'panel' && <PanelPlatillos />}
+      {vista === 'lab10' && <Lab10 />}
     </main>
   )
 }

@@ -1,8 +1,8 @@
 # GastroMind — frontend (React + Vite)
 
-Maqueta del catálogo de GastroMind hecha en los **Laboratorios 09 (Introducción a React) y 10 (Componentes y eventos)** del curso *Desarrollo de Aplicaciones Empresariales*.
+Maqueta del catálogo de GastroMind hecha en los **Laboratorios 09 (Introducción a React), 10 (Componentes y eventos) y 11 (Comunicación entre componentes)** del curso *Desarrollo de Aplicaciones Empresariales*.
 
-Los datos están **escritos a mano** en `src/datos.js` (en el Lab 09 estaban en `App.jsx`), con la misma forma que la respuesta de la API: todavía no se llama a Django ni a Spring (eso es en la Semana 12). No reemplaza a la web oficial (`web-react` en GastroMind-SpringBoot).
+Los datos están **escritos a mano** en `src/datos.js`, `src/datosCarta.js` y `src/practica/datos.js`, con la misma forma que la respuesta de la API: todavía no se llama a Django ni a Spring (eso es en la Semana 12). No reemplaza a la web oficial (`web-react` en GastroMind-SpringBoot).
 
 ## Requisitos
 
@@ -52,4 +52,38 @@ La interfaz del Lab 09 se reorganizó en componentes funcionales, cada uno en su
 | `RestauranteCard` + `PersonaItem` | Cada restaurante con su personal (1:N) y el conteo de activos | Componente dentro de componente |
 
 Lo que se agrega o cambia en pantalla vive en el estado: al recargar vuelve a los datos de `src/datos.js`. Para guardarlo falta llamar a la API (`POST /api/catalogo/insumos/` en Django y `POST /api/empleados` en Spring), que es la Semana 12.
+
+## Comunicación entre componentes (Laboratorio 11)
+
+Arriba hay tres botones para elegir la pantalla: **Parte 1** (práctica), **Parte 2** (panel de la carta) y **Lab 10**. `App` solo guarda cuál se ve.
+
+### Parte 1 — mini catálogo con carrito (`src/practica`)
+
+Cafetería de ejemplo: `Practica` (padre) guarda el carrito, el texto del buscador y el aviso, y los reparte por props.
+
+| Componente | Recibe | Avisa al padre con |
+|---|---|---|
+| `Catalogo` → `ProductoCard` | los productos ya filtrados | `onAgregar(producto)` |
+| `Carrito` | las líneas del carrito | `onQuitar(id)`, `onVaciar()` |
+| `Buscador` | el texto (`valor`) | `onCambiar(texto)` |
+| `Aviso` | el mensaje *Agregado: …* | `onCerrar(null)` a los 3 s |
+
+El total y las unidades se calculan con `reduce()` en `Carrito`, sin `useState`. `useEffect` cambia el título de la pestaña (`Carrito (3) — Cafetería`) y `Aviso` limpia su `setTimeout`.
+
+### Parte 2 — panel de la carta (`src/components`)
+
+Pantalla de gestión de los **platillos** de la Sede Central, con la forma de `GET /api/catalogo/productos/` (HU-07 y HU-08). Es un panel propio, no el Django Admin.
+
+| Componente | Qué hace |
+|---|---|
+| `PanelPlatillos` | **Padre:** guarda los platillos, el filtro y el aviso. Cambia la lista con `map()`, `filter()` y spread (nunca `push` ni `splice`) |
+| `ListadoPlatillos` → `FilaPlatillo` | Una fila por platillo con *Activar/Desactivar* y *Eliminar*, que avisan con `onCambiarEstado(id)` y `onEliminar(id)` |
+| `FormularioPlatillo` | Alta controlada con las reglas de la API (nombre obligatorio, precio mayor que 0 con 2 decimales, categoría obligatoria). Entrega el platillo con `onGuardar` y queda vacío |
+| `ResumenCarta` | Hermano del listado: platillos, activos, inactivos y precio promedio, calculados sin `useState`. `useEffect` pone *Carta (N activos) — GastroMind* en la pestaña |
+| `FiltroCarta` | Texto y estado (todos, activos, inactivos), guardados en el padre. Sin resultados: *No hay platillos que coincidan* |
+| `AvisoPanel` | *Platillo registrado: …*, que desaparece a los 3 s limpiando su temporizador |
+
+**Los datos bajan por props y los avisos suben por funciones.** El estado vive en `PanelPlatillos` porque lo usan tres hermanos (el listado, el resumen y el filtro): si viviera en uno de ellos, los otros no se enterarían de los cambios.
+
+*Eliminar* es solo para practicar `filter()`: en la API real un platillo no se borra (HU-07 responde 405), se desactiva.
 
