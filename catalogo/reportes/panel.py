@@ -11,9 +11,9 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from ..models import PedidoDetalle, Producto, RecetaDetalle
-from ..permissions import EsAdmin
-from ..serializers import costo_de
+from catalogo.models import PedidoDetalle, Producto, RecetaDetalle
+from catalogo.permissions import EsAdmin
+from catalogo.serializers import costo_de
 from .comun import pedidos_entre, periodo, salidas_entre, soles, ventas_entre
 
 PLATILLOS_EN_EL_PANEL = 5

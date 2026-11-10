@@ -8,7 +8,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_date
 from rest_framework.exceptions import ValidationError
 
-from ..models import MovimientoInventario, Pedido, PedidoDetalle
+from catalogo.models import MovimientoInventario, Pedido, PedidoDetalle
 
 CERO = Decimal('0')
 DINERO = DecimalField(max_digits=14, decimal_places=2)

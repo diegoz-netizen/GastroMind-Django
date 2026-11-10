@@ -1,11 +1,11 @@
 import { useState } from 'react'
-import { insumos as insumosIniciales } from '../datos'
+import { insumos as insumosIniciales } from '../../datos'
 import AvisoPanel from './AvisoPanel'
 import BuscadorInsumos from './BuscadorInsumos'
 import FormularioInsumo from './FormularioInsumo'
 import ListaInsumos from './ListaInsumos'
 import ResumenInsumos from './ResumenInsumos'
-import Tarjeta from './Tarjeta'
+import Tarjeta from '../compartido/Tarjeta'
 
 // Lab 11: padre de la pantalla "Insumos" del panel administrativo. Aquí vive el estado que en el Lab 10
 // estaba repartido entre ListaInsumos e InsumoCard: los insumos, la búsqueda y el aviso.
@@ -41,19 +41,17 @@ function PanelInsumos() {
   const nombresUsados = insumos.map((insumo) => insumo.nombre.toLowerCase())
 
   return (
-    <Tarjeta titulo="Parte 2: insumos de la Sede Central (panel administrativo)">
+    <div>
       {aviso && <AvisoPanel mensaje={aviso} onCerrar={setAviso} />}
+      <ResumenInsumos insumos={insumos} />
       <div className="panel">
-        <div>
+        <Tarjeta titulo="Insumos del almacén">
           <BuscadorInsumos valor={busqueda} onCambiar={setBusqueda} />
           <ListaInsumos insumos={visibles} total={insumos.length} onReservar={reservar} onEliminar={eliminar} />
-        </div>
-        <div>
-          <ResumenInsumos insumos={insumos} />
-          <FormularioInsumo nombresUsados={nombresUsados} onGuardar={guardar} />
-        </div>
+        </Tarjeta>
+        <FormularioInsumo nombresUsados={nombresUsados} onGuardar={guardar} />
       </div>
-    </Tarjeta>
+    </div>
   )
 }
 

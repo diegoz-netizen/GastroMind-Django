@@ -8,7 +8,7 @@ from django.test import TestCase
 from django.utils import timezone as dj_timezone
 from rest_framework.test import APIClient
 
-from .models import (Categoria, Empleado, Ingrediente, MotivoMerma, MovimientoInventario, PedidoDetalle, Producto,
+from catalogo.models import (Categoria, Empleado, Ingrediente, MotivoMerma, MovimientoInventario, PedidoDetalle, Producto,
                      Proveedor, RecetaDetalle, RegistroIngresoProveedor, RegistroMerma, Restaurante, Rol)
 
 URL = '/api/catalogo/insumos/'
@@ -381,7 +381,7 @@ class FormatoErroresTest(BaseCatalogoTest):
 
     def test_error_inesperado_500_sin_detalles_internos(self):
         self.con_token(token_como_spring(self.admin_central))
-        with mock.patch('catalogo.views.IngredienteViewSet.get_queryset', side_effect=RuntimeError('secreto')), \
+        with mock.patch('catalogo.api_views.IngredienteViewSet.get_queryset', side_effect=RuntimeError('secreto')), \
                 self.assertLogs('config.errores', level='ERROR'):
             respuesta = self.client.get(URL)
         cuerpo = self.assertFormato(respuesta, 500, 'ERROR_INTERNO')

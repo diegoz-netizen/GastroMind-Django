@@ -1,0 +1,53 @@
+/* Tokens del panel de administración (guía: ui-ux-pro-max, estilo minimalista para dashboards) */
+:root {
+  --pizarra-900: #0f172a;
+  --pizarra-800: #1e293b;
+  --pizarra-700: #334155;
+  --pizarra-500: #64748b;
+  --pizarra-300: #cbd5e1;
+  --pizarra-200: #e2e8f0;
+  --pizarra-100: #f1f5f9;
+  --pizarra-50: #f8fafc;
+  --verde: #16a34a;
+  --verde-suave: #dcfce7;
+  --verde-texto: #166534;
+  --ambar: #b45309;
+  --ambar-suave: #fef3c7;
+  --rojo: #dc2626;
+  --rojo-suave: #fee2e2;
+  --rojo-texto: #991b1b;
+  --radio: 10px;
+  --sombra: 0 1px 2px rgba(15, 23, 42, 0.06), 0 1px 3px rgba(15, 23, 42, 0.08);
+  color-scheme: light;
+}
+
+html,
+body {
+  margin: 0;
+  background-color: var(--pizarra-50);
+  color: var(--pizarra-900);
+  font-family: 'Fira Sans', 'Segoe UI', Roboto, Arial, sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--verde);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+  }
+}

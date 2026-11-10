@@ -15,6 +15,27 @@ React (web-react) ──┬──▶ Spring Boot (GastroMind-SpringBoot) ── 
                          PostgreSQL (una sola BD compartida)
 ```
 
+**Dentro de este repo** se sigue la estructura del curso (proyecto + apps, MVT; con DRF el Serializer entrega el JSON y la pantalla es React):
+
+```
+config/          proyecto: settings y URLs raíz (api/catalogo/)
+catalogo/        app del módulo de administración
+├── models.py        M: modelos (managed = False) y QuerySets
+├── serializers.py   modelo ↔ JSON y validaciones
+├── api_views.py     V: ViewSets y vistas de la API
+├── api_urls.py      DefaultRouter (+ alertas y reportes)
+├── admin.py         Django Admin
+├── authentication.py, permissions.py   JWT de Spring y roles
+├── reportes/        reportes del gerente (HU-19 a HU-24), un archivo por HU
+│   ├── merma.py, consumo.py, panel.py, proveedores.py, sugerencia.py, exportar.py, comun.py
+│   ├── api_urls.py
+│   └── tests/
+└── tests/
+frontend/        la pantalla del panel de administración (React + Vite)
+```
+
+Las URLs no cambiaron: los reportes siguen en `/api/catalogo/reportes/...`.
+
 ## Reglas para compartir la base de datos con Spring Boot
 
 1. **La estructura de las tablas la define `docs/script_database.sql`** de GastroMind-SpringBoot. Las tablas que ya existen se mapean con modelos `managed = False` (`python manage.py inspectdb` ayuda a generarlos). **Nunca** crear migraciones que alteren tablas que usa Spring.
@@ -92,7 +113,7 @@ python manage.py test --settings=config.settings_test
 
 Usan SQLite en memoria (no necesitan PostgreSQL ni `.env`). Los tokens de prueba se arman igual que los emite Spring.
 
-Los reportes tienen un test por HU (`catalogo/test_reportes_<tema>.py`) sobre la misma base de datos de prueba (`test_reportes_base.py`: restaurante, insumos, pedidos servidos y movimientos con fecha fija).
+Los tests están en `catalogo/tests/` y `catalogo/reportes`. Los reportes tienen un test por HU (`catalogo/reportes`) sobre la misma base de datos de prueba (`test_reportes_base.py`: restaurante, insumos, pedidos servidos y movimientos con fecha fija).
 
 ## Qué hay
 
@@ -102,22 +123,22 @@ Los reportes tienen un test por HU (`catalogo/test_reportes_<tema>.py`) sobre la
 | Modelos `managed = False` sobre `restaurante`, `rol`, `empleado`, `ingrediente` | `catalogo/models.py` | S03–S04 |
 | Admin de insumos (empleados y roles en solo lectura) | `catalogo/admin.py` | S05 |
 | Autenticación con el JWT de Spring + exige empleado ACTIVO | `catalogo/authentication.py` | S08 |
-| `GET /api/catalogo/insumos/` (y `/{id}/`) filtrado por restaurante, con `?search=` y `?ordering=` | `catalogo/views.py`, `serializers.py`, `urls.py` | S07–S08 |
-| **HU-05** `POST /api/catalogo/insumos/`: validaciones de CA-05 (nombre, unidad y costo obligatorios; costo y stock mínimo > 0; nombre único por restaurante; dotación si es `LIBRE`). Solo `ADMINISTRADOR` o `ALMACENERO` (403 al resto) | `catalogo/serializers.py`, `permissions.py`, `views.py` | S06–S08 |
-| **HU-25** `PATCH /api/catalogo/insumos/{id}/clasificacion/`: `RECETA` o `LIBRE`; `LIBRE` exige cantidad y periodo de dotación, y `RECETA` la borra. Solo `ADMINISTRADOR` (403 al resto). No toca stock ni costo. El conteo cíclico va con la HU-30 | `catalogo/serializers.py`, `views.py` | S4 |
-| **HU-07** carta: `GET/POST /api/catalogo/productos/` (`?estado=ACTIVO` = los que salen en la toma de pedidos), `PUT/PATCH /{id}/` edita nombre, precio (> 0), categoría y receta sí/no, `PATCH /{id}/estado/` activa o desactiva. Sin `DELETE` (405): un platillo desactivado se conserva en el historial (CA-07). Escribe solo `ADMINISTRADOR` | `catalogo/views.py`, `serializers.py`, `models.py` | S07–S08 |
-| **HU-08** costo del platillo: cada platillo de `/api/catalogo/productos/` trae `costo` (Σ cantidad de la receta × costo unitario del insumo, redondeado al final a 2 decimales), `margen` (precio − costo) y `porcentaje_costo` (% del precio que se va en insumos). Se calculan al vuelo, no se guardan: cambian al cambiar la receta o el costo de un insumo (CA-08). Sin receta → costo 0 | `catalogo/serializers.py` (`costo_de`), `views.py` | S07–S08 |
-| **Reportes del gerente (base):** todo cuelga de `/api/catalogo/reportes/` y es solo para `ADMINISTRADOR` (403 al resto). Cada reporte acepta `?desde=` y `?hasta=` (AAAA-MM-DD, días de Perú, los dos incluidos); sin ellos va del 1 del mes en curso a hoy. Ventas = platillos `SERVIDO`; costo y merma = salidas `CONSUMO` y `MERMA` del inventario, valorizadas | `catalogo/reportes/comun.py`, `urls.py`, `catalogo/permissions.py` (`EsAdmin`) | S4 |
-| **HU-20** `GET reportes/consumo/`: por insumo `RECETA`, consumo teórico (platillos servidos × receta) contra real (`CONSUMO` + `MERMA`, más lo que faltó en el último conteo físico del periodo, HU-30). Trae diferencia y %, y marca `resaltar` si se desvía más de 5 %. Los insumos `LIBRE` no entran: van por dotación y conteo | `catalogo/reportes/consumo.py` | S4 |
-| **HU-23** `GET reportes/panel/`: ventas, costo de insumos, merma y margen bruto del periodo, en soles y en % de las ventas, contra el periodo anterior del mismo largo. Trae también las ventas y el costo por semana y los 5 platillos más vendidos con su % de costo | `catalogo/reportes/panel.py` | S4 |
-| **HU-22** `/api/catalogo/proveedores/`: el gerente registra proveedores (`POST`, `PATCH`; no se borran) y con `POST {id}/precios/` el precio de cada insumo, su tiempo de entrega y el flete (si ya había uno, se reemplaza). `GET reportes/proveedores/?insumo=&cantidad=` ordena los proveedores del insumo por costo total (precio × cantidad + flete) y marca el `sugerido` (CA-22); `opciones_de()` es la que usa la HU-21. Solo `ADMINISTRADOR`. En el Admin, el proveedor con sus precios en un Inline. Necesita la migración `008` (Spring) | `catalogo/views.py`, `catalogo/reportes/proveedores.py`, `admin.py` | S4 |
-| **HU-24** `GET reportes/exportar/?tipo=`: baja en Excel (`.xlsx`, con `openpyxl`) el reporte de `merma` (mismos filtros de la HU-19: periodo, `insumo` y `motivo`), de `consumo` (teórico vs. real, HU-20) o de `inventario` (stock de hoy con su mínimo y valor). Los números salen de las mismas funciones que la pantalla, y cada archivo trae arriba el restaurante, el periodo y los filtros. Tipo desconocido o filtro de otro restaurante → 400. Solo `ADMINISTRADOR` | `catalogo/reportes/exportar.py` | S4 |
+| `GET /api/catalogo/insumos/` (y `/{id}/`) filtrado por restaurante, con `?search=` y `?ordering=` | `catalogo/api_views.py`, `serializers.py`, `api_urls.py` | S07–S08 |
+| **HU-05** `POST /api/catalogo/insumos/`: validaciones de CA-05 (nombre, unidad y costo obligatorios; costo y stock mínimo > 0; nombre único por restaurante; dotación si es `LIBRE`). Solo `ADMINISTRADOR` o `ALMACENERO` (403 al resto) | `catalogo/serializers.py`, `permissions.py`, `api_views.py` | S06–S08 |
+| **HU-25** `PATCH /api/catalogo/insumos/{id}/clasificacion/`: `RECETA` o `LIBRE`; `LIBRE` exige cantidad y periodo de dotación, y `RECETA` la borra. Solo `ADMINISTRADOR` (403 al resto). No toca stock ni costo. El conteo cíclico va con la HU-30 | `catalogo/serializers.py`, `api_views.py` | S4 |
+| **HU-07** carta: `GET/POST /api/catalogo/productos/` (`?estado=ACTIVO` = los que salen en la toma de pedidos), `PUT/PATCH /{id}/` edita nombre, precio (> 0), categoría y receta sí/no, `PATCH /{id}/estado/` activa o desactiva. Sin `DELETE` (405): un platillo desactivado se conserva en el historial (CA-07). Escribe solo `ADMINISTRADOR` | `catalogo/api_views.py`, `serializers.py`, `models.py` | S07–S08 |
+| **HU-08** costo del platillo: cada platillo de `/api/catalogo/productos/` trae `costo` (Σ cantidad de la receta × costo unitario del insumo, redondeado al final a 2 decimales), `margen` (precio − costo) y `porcentaje_costo` (% del precio que se va en insumos). Se calculan al vuelo, no se guardan: cambian al cambiar la receta o el costo de un insumo (CA-08). Sin receta → costo 0 | `catalogo/serializers.py` (`costo_de`), `api_views.py` | S07–S08 |
+| **Reportes del gerente (base):** todo cuelga de `/api/catalogo/reportes/` y es solo para `ADMINISTRADOR` (403 al resto). Cada reporte acepta `?desde=` y `?hasta=` (AAAA-MM-DD, días de Perú, los dos incluidos); sin ellos va del 1 del mes en curso a hoy. Ventas = platillos `SERVIDO`; costo y merma = salidas `CONSUMO` y `MERMA` del inventario, valorizadas | `catalogo/reportes`, `api_urls.py`, `catalogo/permissions.py` (`EsAdmin`) | S4 |
+| **HU-20** `GET reportes/consumo/`: por insumo `RECETA`, consumo teórico (platillos servidos × receta) contra real (`CONSUMO` + `MERMA`, más lo que faltó en el último conteo físico del periodo, HU-30). Trae diferencia y %, y marca `resaltar` si se desvía más de 5 %. Los insumos `LIBRE` no entran: van por dotación y conteo | `catalogo/reportes` | S4 |
+| **HU-23** `GET reportes/panel/`: ventas, costo de insumos, merma y margen bruto del periodo, en soles y en % de las ventas, contra el periodo anterior del mismo largo. Trae también las ventas y el costo por semana y los 5 platillos más vendidos con su % de costo | `catalogo/reportes` | S4 |
+| **HU-22** `/api/catalogo/proveedores/`: el gerente registra proveedores (`POST`, `PATCH`; no se borran) y con `POST {id}/precios/` el precio de cada insumo, su tiempo de entrega y el flete (si ya había uno, se reemplaza). `GET reportes/proveedores/?insumo=&cantidad=` ordena los proveedores del insumo por costo total (precio × cantidad + flete) y marca el `sugerido` (CA-22); `opciones_de()` es la que usa la HU-21. Solo `ADMINISTRADOR`. En el Admin, el proveedor con sus precios en un Inline. Necesita la migración `008` (Spring) | `catalogo/api_views.py`, `catalogo/reportes`, `admin.py` | S4 |
+| **HU-24** `GET reportes/exportar/?tipo=`: baja en Excel (`.xlsx`, con `openpyxl`) el reporte de `merma` (mismos filtros de la HU-19: periodo, `insumo` y `motivo`), de `consumo` (teórico vs. real, HU-20) o de `inventario` (stock de hoy con su mínimo y valor). Los números salen de las mismas funciones que la pantalla, y cada archivo trae arriba el restaurante, el periodo y los filtros. Tipo desconocido o filtro de otro restaurante → 400. Solo `ADMINISTRADOR` | `catalogo/reportes` | S4 |
 
 ## Estado
 
 Base creada el 12/10/2026 (Sprint 2). El catálogo (HU-05 a 08) va en Django (decidido el 13/10). HU-05: consulta y alta de insumos; editar y borrar no entran en este sprint.
 
-**Sprint 4 (desde el 6/11): reportes del gerente.** Van en el paquete `catalogo/reportes/`, un archivo por HU (HU-19 a HU-24), para que dos HU no choquen al mergear. Cada una suma su ruta en `catalogo/reportes/urls.py` y su pestaña en la web (`web-react/src/components/reportes/` del repo GastroMind). El reporte de la HU-20 suma los conteos físicos (HU-30): necesita la migración `009` del repo GastroMind en la BD.
+**Sprint 4 (desde el 6/11): reportes del gerente.** Van en la app `catalogo/reportes`, un archivo por HU (HU-19 a HU-24), para que dos HU no choquen al mergear. Cada una suma su ruta en `catalogo/reportes` y su pestaña en la web (`web-react/src/components/reportes/` del repo GastroMind). El reporte de la HU-20 suma los conteos físicos (HU-30): necesita la migración `009` del repo GastroMind en la BD.
 
 ## Flujo de trabajo
 
@@ -127,16 +148,27 @@ Igual que en el repo principal: una rama por tarea (`feature/HU-xx-...`), Pull R
 
 Diego Panez · Victor Santamaría · Piero Guevara
 
-## Frontend React (Laboratorios 09 y 10)
+## Por semana del curso
 
-La carpeta [`frontend/`](frontend/) tiene una **maqueta en React + Vite** del catálogo (insumos, platillos con su receta y costo) y del personal, con datos escritos a mano que tienen la misma forma que la API. Todavía no consume la API (Semana 12) y no reemplaza a `web-react` de GastroMind-SpringBoot.
+| Semana | Dónde | Archivos |
+|---|---|---|
+| 01–02 · Proyecto y app | `config/`, `catalogo/` | `config/settings.py`, `config/urls.py` |
+| 03–04 · Modelos y relaciones | `catalogo/` | `models.py` (`managed = False`) |
+| 05 · Django Admin | `catalogo/` | `admin.py` (con `TabularInline` de proveedores) |
+| 07 · ORM avanzado | `catalogo/` | `models.py` (QuerySet propio), `api_views.py`, `reportes/` (`transaction.atomic`, `F()`, `select_related` / `prefetch_related`) |
+| 08 · Django REST Framework | `catalogo/` | `serializers.py`, `api_views.py` (ViewSets, filtros, `@action`), `api_urls.py` (`DefaultRouter`), `authentication.py` |
+| 09 a 11 · React | `frontend/src/` | `datos.js` y `components/` (`semana09/`, `semana10/`, `semana11/`, `compartido/`) |
+
+Serializers, vistas y URLs se quedan dentro de cada app, como en el curso (`api_views.py` y `api_urls.py`, PPT de la Semana 08). Los reportes van en `catalogo/reportes/`; los tests, en `catalogo/tests/` y `catalogo/reportes/tests/`.
+
+## Frontend React (Semanas 09 a 11)
+
+La carpeta [`frontend/`](frontend/) es el **panel de administración** en React + Vite (Insumos, Carta y Personal), con datos escritos a mano que tienen la misma forma que la API. Todavía no la consume (Semana 12).
 
 ```bash
 cd frontend
 npm install       # dependencias en node_modules/ (no se sube)
 npm run dev       # http://localhost:5173/
-npm run lint      # oxlint
-npm run build     # versión de producción en dist/ (no se sube)
 ```
 
-Detalle de lo que muestra y de los componentes (Lab 10) en [`frontend/README.md`](frontend/README.md).
+Estructura por semana y detalle de cada módulo en [`frontend/README.md`](frontend/README.md).

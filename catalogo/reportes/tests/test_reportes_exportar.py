@@ -5,9 +5,9 @@ from io import BytesIO
 
 from openpyxl import load_workbook
 
-from .models import MotivoMerma, MovimientoInventario, RegistroMerma
+from catalogo.models import MotivoMerma, MovimientoInventario, RegistroMerma
 from .test_reportes_base import BaseReportesTest, a_las
-from .tests import token_como_spring
+from catalogo.tests.test_catalogo import token_como_spring
 
 URL = '/api/catalogo/reportes/exportar/'
 DIA = date(2026, 10, 15)
