@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 
-// Mensaje del panel ("Platillo registrado: ...") que se oculta a los 3 segundos, limpiando el temporizador.
+// Mensaje del panel ("Insumo registrado: ...") que se oculta a los 3 segundos, limpiando el temporizador.
 function AvisoPanel({ mensaje, onCerrar }) {
   useEffect(() => {
     const temporizador = setTimeout(() => onCerrar(null), 3000)

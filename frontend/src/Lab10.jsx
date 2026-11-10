@@ -1,12 +1,12 @@
-import { empleados, insumos, platillos, restaurantes } from './datos'
+import { empleados, platillos, restaurantes } from './datos'
 import ListaEmpleados from './components/ListaEmpleados'
-import ListaInsumos from './components/ListaInsumos'
 import PlatilloCard from './components/PlatilloCard'
 import RestauranteCard from './components/RestauranteCard'
 import Tarjeta from './components/Tarjeta'
 
 // Laboratorio 10: la interfaz del Laboratorio 09 reorganizada en componentes (src/components)
-// que reciben sus datos por props, con estado (useState) y eventos. Desde el Lab 11 se abre desde App.
+// que reciben sus datos por props, con estado (useState) y eventos. Desde el Lab 11 se abre desde App;
+// los insumos pasaron a la Parte 2 del Lab 11 (PanelInsumos), con el estado en el padre.
 
 const nombreApp = 'GastroMind'
 const IGV = 0.18
@@ -29,10 +29,6 @@ function Lab10() {
       </header>
 
       <h2 className="parte">Parte 1: catálogo</h2>
-
-      <Tarjeta titulo="Insumos">
-        <ListaInsumos insumos={insumos} />
-      </Tarjeta>
 
       <Tarjeta titulo="Platillos y su receta">
         <div className="platillos">

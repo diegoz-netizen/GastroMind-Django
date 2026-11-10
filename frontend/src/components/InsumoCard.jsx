@@ -1,24 +1,24 @@
-import { useState } from 'react'
-
-// Un insumo (GET /api/catalogo/insumos/). El botón reserva unidades para cocina con un contador propio:
-// cada tarjeta guarda el suyo y no se puede reservar más de lo que hay en stock.
-function InsumoCard({ nombre, unidad = 'kg', costo, stock, bajoMinimo }) {
-  const [reservado, setReservado] = useState(0)
-  const stockNumero = Number(stock)
-  const agotado = stockNumero === 0
+// Lab 10: un insumo con su botón Reservar y su propio contador (useState dentro de la tarjeta).
+// Lab 11: ya no guarda estado. Es una fila del listado que avisa al padre con onReservar y onEliminar.
+function InsumoCard({ insumo, onReservar, onEliminar }) {
+  const unidad = insumo.unidad_medida
+  const stock = Number(insumo.stock_actual)
+  const agotado = stock === 0
 
   return (
     <li className="fila">
-      <span className="nombre">{nombre}</span>
-      <span>S/ {Number(costo).toFixed(2)} por {unidad}</span>
+      <span className="nombre">{insumo.nombre}</span>
+      <span>S/ {Number(insumo.costo_unitario).toFixed(2)} por {unidad}</span>
       <span className={agotado ? 'etiqueta agotado' : 'etiqueta'}>
-        {agotado ? 'Agotado' : `Stock: ${stockNumero} ${unidad}`}
+        {agotado ? 'Agotado' : `Stock: ${stock} ${unidad}`}
       </span>
-      {bajoMinimo && !agotado && <span className="aviso">¡Últimas unidades!</span>}
-      <button type="button" onClick={() => setReservado(reservado + 1)} disabled={reservado >= stockNumero}>
+      {insumo.bajo_stock_minimo && !agotado && <span className="aviso">¡Últimas unidades!</span>}
+      <button type="button" onClick={() => onReservar(insumo.id)} disabled={agotado}>
         Reservar 1 {unidad}
       </button>
-      {reservado > 0 && <span className="contador">Reservado: {reservado} {unidad}</span>}
+      <button type="button" className="peligro" onClick={() => onEliminar(insumo.id)}>
+        Eliminar
+      </button>
     </li>
   )
 }
