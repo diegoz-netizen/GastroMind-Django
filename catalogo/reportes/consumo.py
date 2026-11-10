@@ -14,8 +14,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from ..models import ConteoCiclico, Ingrediente, MovimientoInventario, PedidoDetalle, RecetaDetalle
-from ..permissions import EsAdmin
+from catalogo.models import ConteoCiclico, Ingrediente, MovimientoInventario, PedidoDetalle, RecetaDetalle
+from catalogo.permissions import EsAdmin
 from .comun import pedidos_entre, periodo, rango
 
 UMBRAL_DESVIACION = Decimal('5')

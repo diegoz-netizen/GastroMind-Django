@@ -8,9 +8,9 @@ from django.utils import timezone as dj_timezone
 from rest_framework.exceptions import ValidationError
 from rest_framework.request import Request
 
-from .models import Categoria, Mesa, MovimientoInventario, Pedido, PedidoDetalle, Producto
-from .reportes.comun import periodo, rango, salidas_entre, ventas_entre
-from .tests import BaseCatalogoTest
+from catalogo.models import Categoria, Mesa, MovimientoInventario, Pedido, PedidoDetalle, Producto
+from catalogo.reportes.comun import periodo, rango, salidas_entre, ventas_entre
+from catalogo.tests.test_catalogo import BaseCatalogoTest
 
 
 def a_las(dia, hora=12, minuto=0):

@@ -20,8 +20,8 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
-from ..models import Ingrediente, Restaurante
-from ..permissions import EsAdmin
+from catalogo.models import Ingrediente, Restaurante
+from catalogo.permissions import EsAdmin
 from .comun import periodo
 from .consumo import UMBRAL_DESVIACION, teorico_vs_real
 from .merma import _id, merma_por_motivo, motivos_disponibles, resumen_merma

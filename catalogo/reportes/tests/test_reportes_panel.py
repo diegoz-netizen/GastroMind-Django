@@ -2,9 +2,9 @@
 from datetime import date
 from decimal import Decimal
 
-from .models import Categoria, Producto, RecetaDetalle
+from catalogo.models import Categoria, Producto, RecetaDetalle
 from .test_reportes_base import BaseReportesTest, a_las, pedido_servido
-from .tests import token_como_spring
+from catalogo.tests.test_catalogo import token_como_spring
 
 URL = '/api/catalogo/reportes/panel/'
 

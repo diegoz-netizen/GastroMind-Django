@@ -10,8 +10,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from ..models import Ingrediente, ProveedorInsumo
-from ..permissions import EsAdmin
+from catalogo.models import Ingrediente, ProveedorInsumo
+from catalogo.permissions import EsAdmin
 from .comun import soles
 
 

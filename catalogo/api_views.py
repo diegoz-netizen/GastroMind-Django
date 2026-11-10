@@ -2,7 +2,7 @@ from datetime import datetime, time, timedelta
 from decimal import Decimal
 
 from django.db import IntegrityError, transaction
-from django.db.models import F, Prefetch, Q
+from django.db.models import Prefetch, Q
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 from rest_framework import filters, mixins, status, viewsets
@@ -34,6 +34,8 @@ class IngredienteViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelViewSet)
     GET  /api/catalogo/insumos/{id}/   un insumo de otro restaurante responde 404 (no se revela que existe)
     POST /api/catalogo/insumos/        HU-05: registra un insumo (CA-05). Solo ADMINISTRADOR o ALMACENERO.
     GET  /api/catalogo/insumos/{id}/kardex/?desde=&hasta=   HU-15: sus movimientos. Solo ADMINISTRADOR o ALMACENERO.
+    GET  /api/catalogo/insumos/stock-bajo/   Lab 08: los que están en el mínimo o debajo (acepta ?search= y ?ordering=).
+                                              Solo ADMINISTRADOR o ALMACENERO.
     PATCH /api/catalogo/insumos/{id}/clasificacion/   HU-25: RECETA o LIBRE con su dotación. Solo ADMINISTRADOR.
     El costo_unitario solo lo ven el ADMINISTRADOR y el ALMACENERO (Review 2).
     """
@@ -53,7 +55,13 @@ class IngredienteViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelViewSet)
 
     def get_queryset(self):
         # Multi-tenant: SIEMPRE filtrado por el restaurante del empleado autenticado
-        return Ingrediente.objects.filter(restaurante_id=self.request.user.restaurante_id)
+        return Ingrediente.objects.del_restaurante(self.request.user.restaurante_id)
+
+    @action(detail=False, methods=['get'], url_path='stock-bajo', permission_classes=[IsAuthenticated, EsAdminOAlmacenero])
+    def stock_bajo(self, request):
+        # Reutiliza el QuerySet de Ingrediente; filter_queryset aplica ?search= y ?ordering=
+        insumos = self.filter_queryset(self.get_queryset().bajo_stock_minimo())
+        return Response(self.get_serializer(insumos, many=True).data)
 
     def perform_create(self, serializer):
         try:
@@ -261,7 +269,7 @@ class AlertasView(APIView):
         restaurante_id = request.user.restaurante_id
         hoy = timezone.localdate()  # hora de Perú (TIME_ZONE), no UTC: el día cambia a medianoche de Lima
 
-        insumos = Ingrediente.objects.filter(restaurante_id=restaurante_id, stock_actual__lte=F('stock_minimo'))
+        insumos = Ingrediente.objects.del_restaurante(restaurante_id).bajo_stock_minimo()
         lotes = (RegistroIngresoProveedor.objects
                  .filter(ingrediente__restaurante_id=restaurante_id,
                          fecha_vencimiento__lte=hoy + timedelta(days=DIAS_AVISO_VENCIMIENTO))

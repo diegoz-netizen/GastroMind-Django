@@ -1,89 +1,51 @@
-# GastroMind — frontend (React + Vite)
+# GastroMind — panel de administración (React + Vite)
 
-Maqueta del catálogo de GastroMind hecha en los **Laboratorios 09 (Introducción a React), 10 (Componentes y eventos) y 11 (Comunicación entre componentes)** del curso *Desarrollo de Aplicaciones Empresariales*.
+Pantalla del **módulo de administración** de GastroMind hecha en las Semanas 09 a 11 del curso *Desarrollo de Aplicaciones Empresariales*: Insumos, Carta y Personal de la Sede Central.
 
-Los datos están **escritos a mano** en `src/datos.js`, `src/datosCarta.js` y `src/practica/datos.js`, con la misma forma que la respuesta de la API: todavía no se llama a Django ni a Spring (eso es en la Semana 12). No reemplaza a la web oficial (`web-react` en GastroMind-SpringBoot).
-
-## Requisitos
-
-- Node.js LTS (incluye npm)
+Los datos están **escritos a mano** en `src/datos.js`, con la misma forma que la respuesta de la API (Semana 08). Todavía no se llama a Django ni a Spring: eso es la Semana 12.
 
 ## Instalar y ejecutar
 
+Solo hace falta Node.js LTS (incluye npm). No necesita Django, Spring ni la base de datos.
+
 ```bash
 cd frontend
-npm install       # descarga las dependencias en node_modules/ (no se sube al repo)
-npm run dev       # servidor de desarrollo en http://localhost:5173/
-```
-
-Si `web-react` ya está usando el puerto 5173, Vite toma el siguiente libre (5174) y lo muestra en la terminal.
-
-Otros comandos:
-
-```bash
+npm install       # la primera vez: dependencias en node_modules/ (no se sube)
+npm run dev       # http://localhost:5173/
 npm run lint      # revisa el código con oxlint
-npm run build     # genera la versión de producción en dist/ (no se sube al repo)
+npm run build     # versión de producción en dist/ (no se sube)
 ```
 
-## Qué muestra
+Si el puerto 5173 está ocupado (por ejemplo, por `web-react`), Vite toma el siguiente libre y lo muestra en la terminal.
 
-**Parte 1 — catálogo de la Sede Central**
-- **Insumos** (forma de `GET /api/catalogo/insumos/`, HU-05): costo por unidad y stock. *Agotado* si el stock es 0 y *¡Últimas unidades!* si está bajo el mínimo.
-- **Platillos y su receta** (forma de `GET /api/catalogo/productos/`, HU-06 y HU-07): cada platillo con sus insumos (relación 1:N) y su **costo de insumos** calculado en JavaScript, con una barra del % del precio.
+## Estructura por semana
 
-**Parte 2 — personal** (modelos `Restaurante` y `Empleado`, registrados en el Admin de Django)
-- **Restaurantes** y **Empleados** (forma de `GET /api/empleados` de Spring): *Activo* / *Inactivo*, y *No puede iniciar sesión* si está inactivo.
-- **Personal por restaurante**: los empleados de cada restaurante (relación 1:N) con el conteo de activos.
+```
+src/
+├── main.jsx, App.jsx, App.css, index.css   entrada, menú lateral y estilos
+├── datos.js         datos escritos a mano con la forma de la API (como en el PPT S10)
+├── components/
+│   ├── compartido/   Tarjeta.jsx
+│   ├── semana09/     Carta.jsx
+│   ├── semana10/     PlatilloCard, LineaReceta, EmpleadoCard, ListaEmpleados,
+│   │                 RestauranteCard, PersonaItem, Personal.jsx
+│   └── semana11/     PanelInsumos, ListaInsumos, InsumoCard, BuscadorInsumos,
+│                     FormularioInsumo, ResumenInsumos, AvisoPanel
+└── practica/        Semana 11, Parte 1 (cafetería de la guía; no se muestra en el panel)
+```
 
-Si un arreglo está vacío se muestra *No hay registros*.
+| Semana | Módulo | Qué se trabaja | Archivos |
+|---|---|---|---|
+| 09 · Introducción a React | — | Vite, `index.html` → `main.jsx` → `App.jsx`, JSX con expresiones, `map` + `key`, condicionales | `index.html`, `main.jsx`, `semana09/Carta.jsx`, `datos.js` |
+| 10 · Componentes, props, estado y eventos | Carta, Personal | Componentes por archivo, props con valor por defecto, `children`, componente dentro de componente, `useState`, `onClick`, buscador controlado, formulario con `onSubmit` y validación | `semana10/*`, `compartido/Tarjeta.jsx` |
+| 11 · Comunicación entre componentes | Insumos | Estado elevado al padre (`PanelInsumos`), los hijos avisan con funciones (`onReservar`, `onEliminar`, `onGuardar`, `onCambiar`), datos derivados sin `useState`, `useEffect` con limpieza | `semana11/*`, `practica/*` |
 
-## Componentes (Laboratorio 10)
+**Compartidos:** `datos.js` lo usan las tres semanas y va en `src/` como en el curso; `Tarjeta.jsx` la usan la 10 y la 11, por eso está en `components/compartido/`. `Carta.jsx` (Semana 09) dibuja cada platillo con `PlatilloCard` de la Semana 10.
 
-La interfaz del Lab 09 se reorganizó en componentes funcionales, cada uno en su archivo de `src/components`, que reciben sus datos por props. El estado y los eventos se manejan dentro del componente que los usa (pasar funciones entre componentes es de la Semana 11).
+## Módulos
 
-| Componente | Qué hace | Lo que trabaja |
-|---|---|---|
-| `Tarjeta` | Sección con título; lo de adentro llega como `children` | Composición (como `{% block %}` en los Templates de Django) |
-| `InsumoCard` | Un insumo: costo, stock, *Agotado* / *¡Últimas unidades!*. *Reservar 1 kg* suma a un contador propio; se desactiva cuando lo reservado llega al stock (un insumo agotado no se puede reservar) | Props con valor por defecto (`unidad = 'kg'`), `useState`, `onClick` |
-| `ListaInsumos` | Los insumos con buscador y el formulario *Nuevo insumo* | `map` + `key`, campo controlado, `onSubmit` + `preventDefault`, validación como `IngredienteSerializer` (nombre obligatorio y único, costo y stock mínimo > 0; nace con stock 0) |
-| `PlatilloCard` + `LineaReceta` | Platillo con su receta (1:N) y su costo de insumos, con la barra del % del precio | Componente dentro de componente, total calculado |
-| `EmpleadoCard` | Un empleado con *Activar* / *Desactivar* (solo en pantalla). Al administrador no se le ofrece (HL-008) | `useState`, `onClick`, botón desactivado según el rol |
-| `ListaEmpleados` | El personal con buscador (nombre o correo) y el formulario *Registrar empleado* | Campo controlado, formulario validado como la HU-01 (nombre obligatorio, correo válido y único) |
-| `RestauranteCard` + `PersonaItem` | Cada restaurante con su personal (1:N) y el conteo de activos | Componente dentro de componente |
+- **Insumos** (forma de `GET /api/catalogo/insumos/`, HU-05): indicadores (registrados, bajo el mínimo, agotados, valor del stock), lista con buscador, *Reservar* y *Eliminar*, y el formulario *Nuevo insumo* con las reglas de la API. `PanelInsumos` guarda el estado porque lo usan tres hermanos: la lista, el resumen y el buscador.
+- **Carta** (forma de `GET /api/catalogo/productos/`, HU-06 a HU-08): cada platillo con su receta (1:N), su costo de insumos y la barra del % del precio.
+- **Personal** (forma de `GET /api/empleados` de Spring, HU-01 y HU-03): empleados con *Activar/Desactivar* (al administrador no se le ofrece), buscador, *Registrar empleado* y el personal por sede.
 
-Lo que se agrega o cambia en pantalla vive en el estado: al recargar vuelve a los datos de `src/datos.js`. Para guardarlo falta llamar a la API (`POST /api/catalogo/insumos/` en Django y `POST /api/empleados` en Spring), que es la Semana 12.
-
-## Comunicación entre componentes (Laboratorio 11)
-
-Arriba hay tres botones para elegir la pantalla: **Parte 1** (práctica), **Parte 2** (panel de la carta) y **Lab 10**. `App` solo guarda cuál se ve.
-
-### Parte 1 — mini catálogo con carrito (`src/practica`)
-
-Cafetería de ejemplo: `Practica` (padre) guarda el carrito, el texto del buscador y el aviso, y los reparte por props.
-
-| Componente | Recibe | Avisa al padre con |
-|---|---|---|
-| `Catalogo` → `ProductoCard` | los productos ya filtrados | `onAgregar(producto)` |
-| `Carrito` | las líneas del carrito | `onQuitar(id)`, `onVaciar()` |
-| `Buscador` | el texto (`valor`) | `onCambiar(texto)` |
-| `Aviso` | el mensaje *Agregado: …* | `onCerrar(null)` a los 3 s |
-
-El total y las unidades se calculan con `reduce()` en `Carrito`, sin `useState`. `useEffect` cambia el título de la pestaña (`Carrito (3) — Cafetería`) y `Aviso` limpia su `setTimeout`.
-
-### Parte 2 — panel de la carta (`src/components`)
-
-Pantalla de gestión de los **platillos** de la Sede Central, con la forma de `GET /api/catalogo/productos/` (HU-07 y HU-08). Es un panel propio, no el Django Admin.
-
-| Componente | Qué hace |
-|---|---|
-| `PanelPlatillos` | **Padre:** guarda los platillos, el filtro y el aviso. Cambia la lista con `map()`, `filter()` y spread (nunca `push` ni `splice`) |
-| `ListadoPlatillos` → `FilaPlatillo` | Una fila por platillo con *Activar/Desactivar* y *Eliminar*, que avisan con `onCambiarEstado(id)` y `onEliminar(id)` |
-| `FormularioPlatillo` | Alta controlada con las reglas de la API (nombre obligatorio, precio mayor que 0 con 2 decimales, categoría obligatoria). Entrega el platillo con `onGuardar` y queda vacío |
-| `ResumenCarta` | Hermano del listado: platillos, activos, inactivos y precio promedio, calculados sin `useState`. `useEffect` pone *Carta (N activos) — GastroMind* en la pestaña |
-| `FiltroCarta` | Texto y estado (todos, activos, inactivos), guardados en el padre. Sin resultados: *No hay platillos que coincidan* |
-| `AvisoPanel` | *Platillo registrado: …*, que desaparece a los 3 s limpiando su temporizador |
-
-**Los datos bajan por props y los avisos suben por funciones.** El estado vive en `PanelPlatillos` porque lo usan tres hermanos (el listado, el resumen y el filtro): si viviera en uno de ellos, los otros no se enterarían de los cambios.
-
-*Eliminar* es solo para practicar `filter()`: en la API real un platillo no se borra (HU-07 responde 405), se desactiva.
-
+Lo que se cambia en pantalla vive en el estado: al recargar vuelve a los datos de `datos.js`. *Eliminar* es para practicar `filter()`: en la API real no se borra.
