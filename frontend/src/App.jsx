@@ -1,72 +1,109 @@
-import { useState } from 'react'
-import './App.css'
-import Carta from './components/semana09/Carta'
-import Personal from './components/semana10/Personal'
+import { useEffect, useState } from 'react'
+import { sesion } from './components/semana12/api'
+import Carta from './components/semana12/Carta'
+import Categorias from './components/semana12/Categorias'
 import PanelInsumos from './components/semana11/PanelInsumos'
+import Login from './components/semana12/Login'
+import Pedidos from './components/semana12/Pedidos'
+import Personal from './components/semana12/Personal'
+import Recetas from './components/semana12/Recetas'
+import { Icon } from './ui'
 
-// Panel de administración de GastroMind. App solo elige qué módulo se ve; cada módulo guarda su estado.
-// Los componentes están por semana del curso en src/components (semana09, semana10, semana11 y compartido).
-// La práctica de la cafetería (Semana 11, Parte 1) sigue en src/practica, pero no se muestra en el panel.
-const MODULOS = [
-  { id: 'insumos', titulo: 'Insumos', descripcion: 'Stock del almacén, mínimos y altas', icono: 'M4 7h16M4 12h16M4 17h10' },
-  { id: 'carta', titulo: 'Carta', descripcion: 'Platillos, recetas y costo de insumos', icono: 'M6 3v18M6 8h4a3 3 0 0 0 0-6H6M14 3v18M18 3c0 6-4 6-4 9' },
-  { id: 'personal', titulo: 'Personal', descripcion: 'Empleados por sede y su acceso', icono: 'M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M2 21a7 7 0 0 1 14 0M17 11a3 3 0 1 0 0-6M22 21a6 6 0 0 0-5-6' },
+// Panel de administración de GastroMind. App elige la pantalla; cada pantalla pide sus datos a la API.
+const MENU = [
+  { id: 'insumos', etiqueta: 'Insumos', icono: 'box', Pantalla: PanelInsumos },
+  { id: 'carta', etiqueta: 'Gestión de carta', icono: 'book', Pantalla: Carta },
+  { id: 'categorias', etiqueta: 'Categorías', icono: 'tag', Pantalla: Categorias },
+  { id: 'recetas', etiqueta: 'Recetas y costos', icono: 'recipe', Pantalla: Recetas },
+  { id: 'pedidos', etiqueta: 'Tomar pedido', icono: 'order', Pantalla: Pedidos },
+  { id: 'personal', etiqueta: 'Personal', icono: 'users', Pantalla: Personal },
 ]
 
-function Icono({ trazo }) {
-  return (
-    <svg className="icono" viewBox="0 0 24 24" aria-hidden="true">
-      <path d={trazo} />
-    </svg>
-  )
+const iniciales = (nombre) => nombre.split(' ').map((x) => x[0]).slice(0, 2).join('').toUpperCase()
+const ROL = { ADMINISTRADOR: 'Administrador', MOZO: 'Mozo', COCINERO: 'Cocinero', ALMACENERO: 'Almacenero' }
+
+function fechaHoy() {
+  const texto = new Date().toLocaleDateString('es-PE', { weekday: 'long', day: 'numeric', month: 'long' })
+  return texto.charAt(0).toUpperCase() + texto.slice(1)
 }
 
 function App() {
-  const [modulo, setModulo] = useState('insumos')
-  const actual = MODULOS.find((item) => item.id === modulo)
+  const [conSesion, setConSesion] = useState(Boolean(sesion.token()))
+  const [pagina, setPagina] = useState('insumos')
+  const [movil, setMovil] = useState(false)
+
+  useEffect(() => {
+    const alCambiar = () => setConSesion(Boolean(sesion.token()))
+    window.addEventListener('sesion-cambio', alCambiar)
+    return () => window.removeEventListener('sesion-cambio', alCambiar)
+  }, [])
+
+  if (!conSesion) {
+    return (
+      <div className="theme-root theme-light-wine">
+        <Login />
+      </div>
+    )
+  }
+
+  const usuario = sesion.usuario() ?? { nombre: 'Usuario', rol: '' }
+  const actual = MENU.find((m) => m.id === pagina)
+  const Pantalla = actual.Pantalla
 
   return (
-    <div className="admin">
-      <aside className="lateral">
-        <div className="marca">
-          <span className="marca-logo">G</span>
+    <div className="app-shell theme-root theme-light-wine">
+      <header className="mobile-header">
+        <button type="button" className="icon-btn" onClick={() => setMovil(!movil)} aria-label="Abrir menú"><Icon name="menu" /></button>
+        <div className="brand compact">
+          <span className="brand-mark">G<i /></span>
+          <strong>GastroMind</strong>
+        </div>
+        <span className="mobile-avatar">{iniciales(usuario.nombre)}</span>
+      </header>
+      <aside className={`sidebar ${movil ? 'open' : ''}`}>
+        <div className="brand">
+          <span className="brand-mark">G<i /></span>
           <div>
             <strong>GastroMind</strong>
-            <small>Administración</small>
+            <span>Administración</span>
           </div>
         </div>
-
-        <nav className="menu">
-          {MODULOS.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className={item.id === modulo ? 'menu-item activo' : 'menu-item'}
-              onClick={() => setModulo(item.id)}
-            >
-              <Icono trazo={item.icono} />
-              {item.titulo}
+        <nav aria-label="Navegación principal">
+          <span className="nav-label">GESTIÓN</span>
+          {MENU.map((m) => (
+            <button type="button" key={m.id} className={pagina === m.id ? 'active' : ''}
+              onClick={() => { setPagina(m.id); setMovil(false) }}>
+              <Icon name={m.icono} />
+              <span>{m.etiqueta}</span>
+              {pagina === m.id && <i />}
             </button>
           ))}
         </nav>
-
-        <div className="sede">
-          <small>Restaurante</small>
-          <strong>Sede Central</strong>
+        <div className="sidebar-bottom">
+          <div className="venue">
+            <span><Icon name="store" /></span>
+            <div>
+              <small>Restaurante activo</small>
+              <strong>Sede Central</strong>
+            </div>
+          </div>
+          <div className="user-mini">
+            <span>{iniciales(usuario.nombre)}</span>
+            <div>
+              <strong>{usuario.nombre}</strong>
+              <small>{ROL[usuario.rol] ?? usuario.rol}</small>
+            </div>
+            <button type="button" aria-label="Cerrar sesión" onClick={sesion.cerrar}><Icon name="logout" /></button>
+          </div>
         </div>
       </aside>
-
-      <main className="contenido">
-        <header className="cabecera">
-          <div>
-            <h1>{actual.titulo}</h1>
-            <p>{actual.descripcion}</p>
-          </div>
-        </header>
-
-        {modulo === 'insumos' && <PanelInsumos />}
-        {modulo === 'carta' && <Carta />}
-        {modulo === 'personal' && <Personal />}
+      {movil && <button type="button" className="backdrop" onClick={() => setMovil(false)} aria-label="Cerrar menú" />}
+      <main className="main-content">
+        <div className="top-utility">
+          <span>{fechaHoy()}</span>
+          <span className="estado-sistema"><i /> Sistema operativo</span>
+        </div>
+        <Pantalla key={actual.id} />
       </main>
     </div>
   )
