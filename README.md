@@ -168,7 +168,7 @@ La carpeta [`frontend/`](frontend/) es el **panel de administración** en React 
 ```bash
 cd frontend
 npm install       # dependencias en node_modules/ (no se sube)
-npm run dev       # http://localhost:5173/
+npm run dev       # http://localhost:5174/
 ```
 
 Estructura por semana y detalle de cada módulo en [`frontend/README.md`](frontend/README.md).
