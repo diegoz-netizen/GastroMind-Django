@@ -1,4 +1,7 @@
 import { useEffect } from 'react'
+import { Metric } from '../../ui'
+
+const dinero = (n) => `S/ ${Number(n).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
 // Lab 11: hermano del listado. Todo se calcula a partir de los insumos que recibe, sin useState.
 function ResumenInsumos({ insumos }) {
@@ -13,23 +16,11 @@ function ResumenInsumos({ insumos }) {
   }, [bajoMinimo])
 
   return (
-    <div className="kpis">
-      <div className="kpi">
-        <small>Insumos registrados</small>
-        <strong>{insumos.length}</strong>
-      </div>
-      <div className={bajoMinimo > 0 ? 'kpi alerta' : 'kpi'}>
-        <small>Bajo el stock mínimo</small>
-        <strong>{bajoMinimo}</strong>
-      </div>
-      <div className={agotados > 0 ? 'kpi peligro' : 'kpi'}>
-        <small>Agotados</small>
-        <strong>{agotados}</strong>
-      </div>
-      <div className="kpi">
-        <small>Valor del stock</small>
-        <strong>S/ {valorStock.toFixed(2)}</strong>
-      </div>
+    <div className="metrics">
+      <Metric label="Insumos registrados" value={String(insumos.length)} note="En esta sede" />
+      <Metric label="Bajo stock mínimo" value={String(bajoMinimo)} note="Requieren atención" tone="warning" />
+      <Metric label="Agotados" value={String(agotados)} note="Sin existencias" tone="danger" />
+      <Metric label="Valor del stock" value={dinero(valorStock)} note="Costo total estimado" tone="brand" />
     </div>
   )
 }
