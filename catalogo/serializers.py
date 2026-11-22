@@ -104,6 +104,19 @@ class CategoriaSerializer(serializers.ModelSerializer):
         model = Categoria
         fields = ['id', 'nombre']
 
+    def validate_nombre(self, nombre):
+        # Lab 12 (error 400): sin espacios a los lados y sin repetir el nombre en el mismo restaurante
+        nombre = nombre.strip()
+        if not nombre:
+            raise serializers.ValidationError('El nombre de la categoría es obligatorio.')
+        request = self.context.get('request')
+        repetidas = Categoria.objects.filter(restaurante_id=request.user.restaurante_id, nombre__iexact=nombre)
+        if self.instance is not None:
+            repetidas = repetidas.exclude(pk=self.instance.pk)
+        if repetidas.exists():
+            raise serializers.ValidationError('Ya existe una categoría con ese nombre en el restaurante.')
+        return nombre
+
 
 class RecetaDetalleReadSerializer(serializers.ModelSerializer):
     ingrediente_id = serializers.ReadOnlyField(source='ingrediente.id')
