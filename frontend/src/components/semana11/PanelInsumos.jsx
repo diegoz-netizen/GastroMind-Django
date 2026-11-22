@@ -15,17 +15,25 @@ const ROLES_QUE_ESCRIBEN = ['ADMINISTRADOR', 'ALMACENERO']
 // estaba repartido entre ListaInsumos e InsumoCard: los insumos, la búsqueda y el aviso.
 // Lab 12: los insumos ya no vienen de datos.js: se piden a la API (useCargar) y el alta hace POST.
 // La API no permite editar ni borrar insumos (el Kardex los referencia), por eso no hay Reservar ni Eliminar.
+// Ejercicio 13: la búsqueda y el filtro viajan a la API como parámetros (?search=, ?ordering= o /stock-bajo/)
+// y el listado se recarga cuando cambian. El resumen usa todos los insumos, sin filtros.
 function PanelInsumos() {
-  const { datos: insumos, setDatos, cargando, error, recargar } = useCargar(async () => (await api.get('/insumos/')).data)
   const [busqueda, setBusqueda] = useState('')
   const [filtro, setFiltro] = useState('Todos')
+  const todos = useCargar(async () => (await api.get('/insumos/')).data)
+  const filtrados = useCargar(async () => {
+    const url = filtro === 'Bajo mínimo' ? '/insumos/stock-bajo/' : '/insumos/'
+    const respuesta = await api.get(url, { params: { search: busqueda.trim(), ordering: 'nombre' } })
+    return respuesta.data
+  }, [busqueda, filtro])
+  const insumos = todos.datos
   const [aviso, setAviso] = useState(null)
   const [errores, setErrores] = useState({})
   const [general, setGeneral] = useState('')
   const puedeEscribir = ROLES_QUE_ESCRIBEN.includes(sesion.usuario()?.rol)
 
-  if (cargando && !insumos) return <Cargando texto="Cargando insumos…" />
-  if (error || !insumos) return <ErrorCarga onReintentar={recargar} />
+  if (todos.cargando && !insumos) return <Cargando texto="Cargando insumos…" />
+  if (todos.error || !insumos) return <ErrorCarga onReintentar={todos.recargar} />
 
   // spread: arreglo nuevo con el insumo que devolvió la API (POST /api/catalogo/insumos/ → 201)
   async function guardar(nuevo) {
@@ -33,7 +41,9 @@ function PanelInsumos() {
     setGeneral('')
     try {
       const respuesta = await api.post('/insumos/', nuevo)
-      setDatos([...insumos, respuesta.data])
+      // El resumen suma el insumo nuevo con un arreglo nuevo; el listado se vuelve a pedir con sus filtros
+      todos.setDatos([...insumos, respuesta.data])
+      filtrados.recargar()
       setAviso(`${respuesta.data.nombre} se agregó al almacén.`)
       return true
     } catch (err) {
@@ -43,10 +53,8 @@ function PanelInsumos() {
     }
   }
 
-  // Lo que ve el listado sale del estado + la búsqueda + el filtro, sin guardarlo aparte
-  const texto = busqueda.trim().toLowerCase()
-  const visibles = insumos.filter((insumo) =>
-    insumo.nombre.toLowerCase().includes(texto) && (filtro === 'Todos' || insumo.bajo_stock_minimo))
+  // Lo que ve el listado es lo que devolvió la API con la búsqueda y el filtro (mientras llega, el anterior)
+  const visibles = filtrados.datos ?? []
   const nombresUsados = insumos.map((insumo) => insumo.nombre.toLowerCase())
 
   return (
@@ -66,7 +74,13 @@ function PanelInsumos() {
             </div>
             <span className="count">{visibles.length} de {insumos.length} insumos</span>
           </div>
-          <ListaInsumos insumos={visibles} total={insumos.length} />
+          {filtrados.error ? (
+            <ErrorCarga onReintentar={filtrados.recargar} />
+          ) : filtrados.datos === null ? (
+            <Cargando texto="Buscando insumos…" />
+          ) : (
+            <ListaInsumos insumos={visibles} total={insumos.length} />
+          )}
         </section>
         {puedeEscribir ? (
           <FormularioInsumo nombresUsados={nombresUsados} onGuardar={guardar} errores={errores} general={general} />
