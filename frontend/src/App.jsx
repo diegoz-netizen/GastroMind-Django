@@ -7,6 +7,7 @@ import Login from './components/semana12/Login'
 import Pedidos from './components/semana12/Pedidos'
 import Personal from './components/semana12/Personal'
 import Recetas from './components/semana12/Recetas'
+import ListaPractica from './practica/ListaPractica'
 import { Icon } from './ui'
 
 // Panel de administración de GastroMind. App elige la pantalla; cada pantalla pide sus datos a la API.
@@ -17,6 +18,7 @@ const MENU = [
   { id: 'recetas', etiqueta: 'Recetas y costos', icono: 'recipe', Pantalla: Recetas },
   { id: 'pedidos', etiqueta: 'Tomar pedido', icono: 'order', Pantalla: Pedidos },
   { id: 'personal', etiqueta: 'Personal', icono: 'users', Pantalla: Personal },
+  { id: 'practica', etiqueta: 'Práctica Lab 12', icono: 'tag', Pantalla: ListaPractica },
 ]
 
 const iniciales = (nombre) => nombre.split(' ').map((x) => x[0]).slice(0, 2).join('').toUpperCase()

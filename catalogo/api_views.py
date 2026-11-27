@@ -169,12 +169,18 @@ class ProveedorViewSet(mixins.CreateModelMixin, mixins.UpdateModelMixin, viewset
 
 class CategoriaViewSet(viewsets.ModelViewSet):
     """
+    GET    /api/catalogo/categorias/        categorías del restaurante del token (?search= por nombre, ?ordering=)
+    POST, PUT/PATCH                          el nombre es obligatorio y no se repite en el restaurante (400)
     DELETE /api/catalogo/categorias/{id}/   solo si no tiene platillos (409): borrarla se llevaría
     sus platillos y recetas (CA-07: un platillo se desactiva, nunca se borra).
     """
 
     permission_classes = [IsAuthenticated, EsAdminParaEscribir]
     serializer_class = CategoriaSerializer
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['nombre']
+    ordering_fields = ['nombre', 'id']
+    ordering = ['nombre']
 
     def get_queryset(self):
         restaurante_id = self.request.user.restaurante_id

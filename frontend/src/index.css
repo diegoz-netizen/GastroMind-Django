@@ -2086,3 +2086,17 @@
     grid-template-columns: 1fr auto;
   }
 }
+
+/* Lab 12, Parte 1 (src/practica/ListaPractica.jsx): estilos simples a propósito */
+.practica-lab12 { padding: 24px; display: grid; gap: 12px; max-width: 640px; }
+.practica-lab12 h2 { margin: 0; font-size: 1.25rem; }
+.practica-form { display: flex; gap: 8px; }
+.practica-lab12 input { flex: 1; padding: 8px 10px; border: 1px solid #d6d3d1; border-radius: 8px; font: inherit; }
+.practica-lab12 button { padding: 8px 12px; border: 1px solid #d6d3d1; border-radius: 8px; background: #fff; cursor: pointer; font: inherit; }
+.practica-lab12 .practica-form button { background: #7a1f35; color: #fff; border-color: #7a1f35; }
+.practica-buscar { width: 100%; }
+.practica-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.practica-lista li { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid #ece7e4; border-radius: 8px; }
+.practica-lista li span { flex: 1; }
+.practica-error { color: #b42318; margin: 0; }
+.practica-mensaje { color: #166534; margin: 0; }

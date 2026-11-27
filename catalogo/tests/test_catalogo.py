@@ -550,6 +550,34 @@ class CartaPermisosTest(BaseCatalogoTest):
         self.assertFalse(Categoria.objects.filter(id=vacia.id).exists())
 
 
+    def test_categoria_con_nombre_repetido_o_vacio_responde_400(self):
+        # Lab 12: validate_nombre (sin importar mayúsculas ni espacios)
+        self.con_token(token_como_spring(self.admin_central))
+        r = self.client.post('/api/catalogo/categorias/', {'nombre': '  fondos '}, format='json')
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('nombre', r.json()['campos'])
+        r = self.client.post('/api/catalogo/categorias/', {'nombre': '   '}, format='json')
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(Categoria.objects.filter(restaurante=self.central).count(), 1)
+
+    def test_renombrar_categoria_con_patch_responde_200(self):
+        self.con_token(token_como_spring(self.admin_central))
+        r = self.client.patch(f'/api/catalogo/categorias/{self.fondos.id}/', {'nombre': 'Platos de fondo'}, format='json')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()['nombre'], 'Platos de fondo')
+        # Guardar con el mismo nombre que ya tiene no cuenta como repetido
+        r = self.client.patch(f'/api/catalogo/categorias/{self.fondos.id}/', {'nombre': 'Platos de fondo'}, format='json')
+        self.assertEqual(r.status_code, 200)
+
+    def test_buscar_categorias_por_nombre(self):
+        Categoria.objects.create(restaurante=self.central, nombre='Postres')
+        Categoria.objects.create(restaurante=self.central, nombre='Bebidas')
+        self.con_token(token_como_spring(self.admin_central))
+        r = self.client.get('/api/catalogo/categorias/', {'search': 'POS'})
+        self.assertEqual([c['nombre'] for c in r.json()], ['Postres'])
+        r = self.client.get('/api/catalogo/categorias/', {'search': 's', 'ordering': '-nombre'})
+        self.assertEqual([c['nombre'] for c in r.json()], ['Postres', 'Fondos', 'Bebidas'])
+
 class GestionCartaTest(BaseCatalogoTest):
     """HU-07 / CA-07: el gerente crea, edita y desactiva platillos; el desactivado no sale para pedidos pero no se borra."""
 
