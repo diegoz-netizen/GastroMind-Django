@@ -16,7 +16,7 @@
     {
       "key": "clave",
       "value": "Demo2026!",
-      "description": "Clave de los usuarios del seed de demo (docs/ensayo_demo.sh)"
+      "description": "Clave de los usuarios del seed de demo (docs/seed_demo.sql del repo de Spring)"
     },
     {
       "key": "token",
